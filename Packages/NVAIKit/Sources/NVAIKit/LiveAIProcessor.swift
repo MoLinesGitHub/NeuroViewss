@@ -28,6 +28,7 @@ public actor LiveAIProcessor {
     private let visionEngine: VisionAnalysisEngine
     private let performanceMonitor: AIPerformanceMonitor
     private let suggestionEngine: AISuggestionEngine
+    private var advancedPerformanceMonitor: AdvancedPerformanceMonitor?
     
     private var isLiveProcessingActive = false
     private var frameBuffer: FrameBuffer
@@ -47,6 +48,7 @@ public actor LiveAIProcessor {
         self.frameBuffer = FrameBuffer(capacity: 5)
         
         Task {
+            await initializeAdvancedPerformanceMonitor()
             await setupProcessingPipeline()
         }
     }
@@ -68,11 +70,12 @@ public actor LiveAIProcessor {
         
         // Start performance monitoring
         await performanceMonitor.startMonitoring()
+        await advancedPerformanceMonitor?.startMonitoring()
         
         // Reset metrics
         performanceMetrics = ProcessingMetrics()
         
-        print("🤖 Live AI Analysis Started")
+        print("🤖 Live AI Analysis Started with Advanced Performance Monitoring")
     }
     
     /// Stops live AI analysis pipeline
@@ -82,6 +85,7 @@ public actor LiveAIProcessor {
         
         // Stop performance monitoring
         await performanceMonitor.stopMonitoring()
+        await advancedPerformanceMonitor?.stopMonitoring()
         
         // Clear current analysis
         currentAnalysis = nil
@@ -98,6 +102,7 @@ public actor LiveAIProcessor {
             return FrameAnalysis.empty()
         }
         
+        // Track performance without closure to avoid concurrency issues
         let startTime = Date()
         lastProcessingTime = startTime
         
@@ -110,6 +115,9 @@ public actor LiveAIProcessor {
         // Update performance metrics
         let processingTime = Date().timeIntervalSince(startTime)
         await updatePerformanceMetrics(processingTime: processingTime)
+        
+        // Record performance manually for advanced monitoring
+        await recordPerformanceMetric("processFrame", processingTime)
         
         // Generate suggestions based on analysis
         let newSuggestions = await generateSuggestions(from: analysis)
@@ -153,9 +161,30 @@ public actor LiveAIProcessor {
         } else {
             await setProcessingQuality(.low)
         }
+        
+        // Advanced pipeline optimization
+        do {
+            try await advancedPerformanceMonitor?.optimizePipeline()
+        } catch {
+            print("⚠️ Pipeline optimization failed: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Gets comprehensive performance report
+    public func getAdvancedPerformanceReport() async -> PerformanceReport? {
+        return await advancedPerformanceMonitor?.getPerformanceReport()
+    }
+    
+    /// Analyzes memory usage patterns
+    public func getMemoryAnalysis() async -> MemoryAnalysis? {
+        return await advancedPerformanceMonitor?.analyzeMemoryUsage()
     }
     
     // MARK: - Private Implementation
+    
+    private func initializeAdvancedPerformanceMonitor() async {
+        advancedPerformanceMonitor = await AdvancedPerformanceMonitor()
+    }
     
     private func setupProcessingPipeline() async {
         // Configure processing pipeline
@@ -208,6 +237,37 @@ public actor LiveAIProcessor {
         
         // Update published metrics
         performanceMetrics = await performanceMonitor.getCurrentMetrics()
+    }
+    
+    private func recordPerformanceMetric(_ operation: String, _ duration: TimeInterval) async {
+        // Create manual performance record for advanced monitoring
+        _ = OperationMetric(
+            name: operation,
+            duration: duration,
+            memoryUsage: getCurrentMemoryUsage(),
+            cpuUsage: 0.0, // Simplified
+            timestamp: Date()
+        )
+        
+        // Note: In a full implementation, we would properly integrate with PerformanceActor
+        // For now, this is a simplified placeholder
+    }
+    
+    private func getCurrentMemoryUsage() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            return info.resident_size
+        }
+        
+        return 0
     }
     
     private func setProcessingQuality(_ quality: ProcessingQuality) async {
