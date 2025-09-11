@@ -20,6 +20,7 @@ public protocol MediaItem: Sendable {
     var id: MediaID { get }
     var createdAt: Date { get }
     var metadata: MediaMetadata { get }
+    var url: URL? { get }
 }
 
 /// Captured photo entity
@@ -29,13 +30,15 @@ public struct CapturedPhoto: MediaItem, Codable {
     public let metadata: MediaMetadata
     public let imageData: Data
     public let format: PhotoFormat
+    public let url: URL?
     
-    public init(imageData: Data, format: PhotoFormat) {
+    public init(imageData: Data, format: PhotoFormat, url: URL? = nil) {
         self.id = MediaID()
         self.createdAt = Date()
         self.metadata = MediaMetadata()
         self.imageData = imageData
         self.format = format
+        self.url = url
     }
 }
 
@@ -61,6 +64,8 @@ public struct RecordedVideo: MediaItem, Codable {
     public let duration: TimeInterval
     public let format: VideoFormat
     
+    public var url: URL? { return videoURL }
+    
     public init(videoURL: URL, duration: TimeInterval, format: VideoFormat) {
         self.id = MediaID()
         self.createdAt = Date()
@@ -76,11 +81,17 @@ public struct MediaMetadata: Codable, Sendable {
     public let location: Location?
     public let cameraSettings: CameraSettings?
     public let fileSize: Int64
+    public let size: Int64
+    public let duration: TimeInterval?
+    public let resolution: MediaResolution?
     
-    public init(location: Location? = nil, cameraSettings: CameraSettings? = nil, fileSize: Int64 = 0) {
+    public init(location: Location? = nil, cameraSettings: CameraSettings? = nil, fileSize: Int64 = 0, size: Int64 = 0, duration: TimeInterval? = nil, resolution: MediaResolution? = nil) {
         self.location = location
         self.cameraSettings = cameraSettings
         self.fileSize = fileSize
+        self.size = size
+        self.duration = duration
+        self.resolution = resolution
     }
 }
 
@@ -170,4 +181,14 @@ public enum VideoQuality: String, Codable, CaseIterable, Sendable {
     case medium = "medium"
     case high = "high"
     case maximum = "maximum"
+}
+
+public struct MediaResolution: Codable, Sendable {
+    public let width: Int
+    public let height: Int
+    
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
 }
