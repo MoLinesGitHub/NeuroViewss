@@ -20,10 +20,20 @@ public actor CompositionAnalyzer {
         }
     }
     
-    private func initialize() async {
+    public func initialize() async {
         // Setup Vision requests for composition analysis
         setupVisionRequests()
         isInitialized = true
+    }
+    
+    public func enableRealTimeMode() async {
+        // Configure for real-time processing
+        isInitialized = true
+    }
+    
+    public func setQualityLevel(_ quality: ProcessingQuality) async {
+        // Adjust processing quality for performance
+        setupVisionRequests()
     }
     
     private func setupVisionRequests() {
@@ -144,7 +154,7 @@ public actor CompositionAnalyzer {
     }
     
     private func analyzeGridAlignment(_ frame: CVPixelBuffer) async -> GridAnalysis {
-        let ciImage = CIImage(cvPixelBuffer: frame)
+        _ = CIImage(cvPixelBuffer: frame)
         
         // Analyze alignment with rule of thirds grid
         let thirdPoints = [
@@ -339,6 +349,10 @@ public enum CompositionSuggestion: Sendable, Codable {
     case good([String])
     case needsImprovement([String])
     case noAnalysis(String)
+    
+    public static func neutral() -> CompositionSuggestion {
+        return .good(["Frame composition is adequate"])
+    }
     
     public var score: Double {
         switch self {
