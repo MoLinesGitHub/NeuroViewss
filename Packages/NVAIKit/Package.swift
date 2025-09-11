@@ -20,7 +20,13 @@ let package = Package(
         ),
         .testTarget(
             name: "NVAIKitTests",
-            dependencies: ["NVAIKit"]
+            dependencies: ["NVAIKit"],
+            exclude: [
+                "IntegrationTests.swift.disabled",
+                "PerformanceTests.swift.disabled", 
+                "ComponentTests.swift.disabled",
+                "LiveAIProcessorTests.swift.disabled"
+            ]
         ),
     ]
 )
