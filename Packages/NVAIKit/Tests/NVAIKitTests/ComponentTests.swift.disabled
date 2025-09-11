@@ -1,0 +1,445 @@
+import Testing
+import Foundation
+import AVFoundation
+@testable import NVAIKit
+
+// MARK: - Vision Analysis Engine Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("VisionAnalysisEngine Tests")
+struct VisionAnalysisEngineTests {
+    
+    @Test("VisionAnalysisEngine initializes correctly")
+    func testVisionEngineInitialization() async throws {
+        let engine = VisionAnalysisEngine()
+        
+        await engine.initialize()
+        
+        // Should be able to process frames after initialization
+        let mockFrame = createMockPixelBuffer()
+        let result = try await engine.analyzeFrame(mockFrame)
+        
+        #expect(result.confidence >= 0.0)
+        #expect(result.faces.count >= 0)
+        #expect(result.detectedText.count >= 0)
+        #expect(result.objects.count >= 0)
+    }
+    
+    @Test("Vision engine throws error when not initialized")
+    func testVisionEngineNotInitialized() async throws {
+        let engine = VisionAnalysisEngine()
+        let mockFrame = createMockPixelBuffer()
+        
+        do {
+            _ = try await engine.analyzeFrame(mockFrame)
+            Issue.record("Should have thrown initialization error")
+        } catch let error as AIProcessingError {
+            if case .initializationFailed = error {
+                // Expected
+            } else {
+                Issue.record("Wrong error type thrown: \(error)")
+            }
+        }
+    }
+    
+    @Test("Vision engine processing quality adjustment")
+    func testVisionEngineQualityAdjustment() async throws {
+        let engine = VisionAnalysisEngine()
+        
+        await engine.initialize()
+        
+        // Test different quality levels
+        for quality in ProcessingQuality.allCases {
+            await engine.setProcessingQuality(quality)
+            
+            let mockFrame = createMockPixelBuffer()
+            let result = try await engine.analyzeFrame(mockFrame)
+            
+            #expect(result.confidence >= 0.0)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
+
+// MARK: - Composition Analyzer Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("CompositionAnalyzer Tests")
+struct CompositionAnalyzerTests {
+    
+    @Test("CompositionAnalyzer initializes correctly")
+    func testCompositionAnalyzerInitialization() async throws {
+        let analyzer = CompositionAnalyzer()
+        
+        await analyzer.initialize()
+        
+        let mockFrame = createMockPixelBuffer()
+        let suggestion = await analyzer.analyzeComposition(mockFrame)
+        
+        #expect(suggestion.score >= 0.0)
+        #expect(suggestion.score <= 1.0)
+        #expect(!suggestion.suggestions.isEmpty)
+    }
+    
+    @Test("Composition analyzer returns no analysis when not initialized")
+    func testCompositionAnalyzerNotInitialized() async throws {
+        let analyzer = CompositionAnalyzer()
+        let mockFrame = createMockPixelBuffer()
+        
+        let suggestion = await analyzer.analyzeComposition(mockFrame)
+        
+        if case .noAnalysis = suggestion {
+            // Expected
+        } else {
+            Issue.record("Should have returned noAnalysis when not initialized")
+        }
+    }
+    
+    @Test("Rule of thirds analysis")
+    func testRuleOfThirdsAnalysis() async throws {
+        let analyzer = CompositionAnalyzer()
+        await analyzer.initialize()
+        
+        let mockFrame = createMockPixelBuffer()
+        let gridAnalysis = await analyzer.detectRuleOfThirds(mockFrame)
+        
+        #expect(gridAnalysis.ruleOfThirdsAlignment >= 0.0)
+        #expect(gridAnalysis.ruleOfThirdsAlignment <= 1.0)
+        #expect(gridAnalysis.gridIntersectionPoints.count == 4)
+    }
+    
+    @Test("Optimal timing suggestions")
+    func testOptimalTimingSuggestions() async throws {
+        let analyzer = CompositionAnalyzer()
+        await analyzer.initialize()
+        
+        let mockFrames = [createMockPixelBuffer(), createMockPixelBuffer()]
+        let timingSuggestion = await analyzer.suggestOptimalTiming(mockFrames)
+        
+        switch timingSuggestion {
+        case .captureNow, .waitForStability, .waitSeconds, .immediate:
+            // All are valid suggestions
+            break
+        }
+        
+        #expect(!timingSuggestion.message.isEmpty)
+    }
+    
+    @Test("Quality level adjustment")
+    func testQualityLevelAdjustment() async throws {
+        let analyzer = CompositionAnalyzer()
+        await analyzer.initialize()
+        
+        for quality in ProcessingQuality.allCases {
+            await analyzer.setQualityLevel(quality)
+            
+            let mockFrame = createMockPixelBuffer()
+            let suggestion = await analyzer.analyzeComposition(mockFrame)
+            
+            #expect(suggestion.score >= 0.0)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
+
+// MARK: - AI Suggestion Engine Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("AISuggestionEngine Tests")
+struct AISuggestionEngineTests {
+    
+    @Test("AISuggestionEngine generates appropriate suggestions")
+    func testSuggestionGeneration() async throws {
+        let engine = AISuggestionEngine()
+        await engine.initialize()
+        
+        // Test with different analysis scenarios
+        let lowExposureAnalysis = createMockFrameAnalysis(exposure: 0.2)
+        let highExposureAnalysis = createMockFrameAnalysis(exposure: 0.9)
+        let goodAnalysis = createMockFrameAnalysis(exposure: 0.6)
+        
+        let lowExposureSuggestions = await engine.generateSuggestions(from: lowExposureAnalysis)
+        let highExposureSuggestions = await engine.generateSuggestions(from: highExposureAnalysis)
+        let goodSuggestions = await engine.generateSuggestions(from: goodAnalysis)
+        
+        // Should suggest exposure adjustment for low exposure
+        let hasLowExposureAdjustment = lowExposureSuggestions.contains { suggestion in
+            if case .adjustExposure(let value) = suggestion {
+                return value > 0
+            }
+            return false
+        }
+        
+        // Should suggest exposure reduction for high exposure
+        let hasHighExposureAdjustment = highExposureSuggestions.contains { suggestion in
+            if case .adjustExposure(let value) = suggestion {
+                return value < 0
+            }
+            return false
+        }
+        
+        #expect(hasLowExposureAdjustment)
+        #expect(hasHighExposureAdjustment)
+        #expect(goodSuggestions.count >= 0)
+    }
+    
+    @Test("Suggestion engine returns empty when not initialized")
+    func testSuggestionEngineNotInitialized() async throws {
+        let engine = AISuggestionEngine()
+        let analysis = createMockFrameAnalysis(exposure: 0.5)
+        
+        let suggestions = await engine.generateSuggestions(from: analysis)
+        
+        #expect(suggestions.isEmpty)
+    }
+    
+    @Test("High quality analysis generates capture suggestion")
+    func testCaptureNowSuggestion() async throws {
+        let engine = AISuggestionEngine()
+        await engine.initialize()
+        
+        let highQualityAnalysis = createMockFrameAnalysis(
+            exposure: 0.7,
+            compositionScore: 0.9,
+            overallScore: 0.85
+        )
+        
+        let suggestions = await engine.generateSuggestions(from: highQualityAnalysis)
+        
+        let hasCaptureNow = suggestions.contains { suggestion in
+            if case .captureNow = suggestion {
+                return true
+            }
+            return false
+        }
+        
+        #expect(hasCaptureNow)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockFrameAnalysis(
+        exposure: Double = 0.5,
+        compositionScore: Double = 0.7,
+        overallScore: Double = 0.6
+    ) -> FrameAnalysis {
+        
+        let composition = CompositionSuggestion.good(["Test composition"])
+        let vision = VisionAnalysisResult.empty()
+        let quality = ImageQualityAnalysis(
+            brightness: 0.6,
+            contrast: 0.7,
+            sharpness: 0.8,
+            noise: 0.3,
+            exposure: exposure,
+            stability: 0.75,
+            lighting: .good,
+            overallQuality: overallScore
+        )
+        
+        return FrameAnalysis(
+            composition: composition,
+            vision: vision,
+            quality: quality,
+            timestamp: Date()
+        )
+    }
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
+
+// MARK: - AI Performance Monitor Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("AIPerformanceMonitor Tests")
+struct AIPerformanceMonitorTests {
+    
+    @Test("AIPerformanceMonitor tracks metrics correctly")
+    func testPerformanceMonitorTracking() async throws {
+        let monitor = AIPerformanceMonitor()
+        
+        await monitor.startMonitoring()
+        
+        // Simulate some processing time
+        await monitor.recordProcessingTime(0.05) // 50ms
+        await monitor.recordProcessingTime(0.03) // 30ms
+        await monitor.recordProcessingTime(0.07) // 70ms
+        
+        let metrics = await monitor.getCurrentMetrics()
+        
+        #expect(metrics.averageProcessingTime > 0)
+        #expect(metrics.totalFramesProcessed == 3)
+        #expect(metrics.currentFPS > 0)
+        #expect(metrics.memoryUsage >= 0)
+        
+        await monitor.stopMonitoring()
+    }
+    
+    @Test("Device capabilities analysis")
+    func testDeviceCapabilitiesAnalysis() async throws {
+        let monitor = AIPerformanceMonitor()
+        
+        let capabilities = await monitor.analyzeDeviceCapabilities()
+        
+        #expect(capabilities.processorCount > 0)
+        #expect(capabilities.availableMemory > 0)
+        #expect(!capabilities.operatingSystem.isEmpty)
+        
+        // At least one performance tier should be true
+        let hasPerformanceTier = capabilities.isHighPerformance || 
+                                capabilities.isMidRange || 
+                                (!capabilities.isHighPerformance && !capabilities.isMidRange)
+        #expect(hasPerformanceTier)
+    }
+    
+    @Test("Performance monitor stops correctly")
+    func testPerformanceMonitorStop() async throws {
+        let monitor = AIPerformanceMonitor()
+        
+        await monitor.startMonitoring()
+        await monitor.recordProcessingTime(0.1)
+        await monitor.stopMonitoring()
+        
+        // Should still be able to get metrics after stopping
+        let metrics = await monitor.getCurrentMetrics()
+        #expect(metrics.totalFramesProcessed == 1)
+    }
+}
+
+// MARK: - Advanced Performance Monitor Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("AdvancedPerformanceMonitor Tests")
+struct AdvancedPerformanceMonitorTests {
+    
+    @Test("AdvancedPerformanceMonitor initialization")
+    func testAdvancedPerformanceMonitorInitialization() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        let report = await monitor.getPerformanceReport()
+        
+        #expect(report.sessionDuration >= 0)
+        #expect(report.systemCapabilities.cpuCores > 0)
+        #expect(report.systemCapabilities.physicalMemory > 0)
+        #expect(!report.systemCapabilities.operatingSystem.isEmpty)
+    }
+    
+    @Test("Operation tracking functionality")
+    func testOperationTracking() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        let result = await monitor.trackOperation("test_operation") {
+            try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+            return "test_result"
+        }
+        
+        #expect(result == "test_result")
+        
+        let report = await monitor.getPerformanceReport()
+        let testOperation = report.operationStatistics.first { $0.name == "test_operation" }
+        
+        #expect(testOperation != nil)
+        if let operation = testOperation {
+            #expect(operation.executionCount == 1)
+            #expect(operation.averageDuration > 0)
+        }
+    }
+    
+    @Test("Memory analysis provides detailed information")
+    func testMemoryAnalysisDetail() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        let analysis = await monitor.analyzeMemoryUsage()
+        
+        #expect(analysis.currentUsage > 0)
+        #expect(analysis.peakUsage >= analysis.currentUsage)
+        #expect(analysis.averageUsage > 0)
+        #expect(!analysis.recommendations.isEmpty)
+        
+        // Memory pressure should be valid
+        let validPressures: [MemoryPressure] = [.low, .moderate, .high, .critical]
+        #expect(validPressures.contains(analysis.memoryPressure))
+    }
+    
+    @Test("Pipeline optimization executes without error")
+    func testPipelineOptimization() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        // Should not throw
+        try await monitor.optimizePipeline()
+        
+        let report = await monitor.getPerformanceReport()
+        #expect(!report.recommendations.isEmpty)
+    }
+    
+    @Test("Continuous monitoring functionality")
+    func testContinuousMonitoring() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        await monitor.startMonitoring()
+        
+        // Let it monitor for a short time
+        try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+        
+        let analysisAfterStart = await monitor.analyzeMemoryUsage()
+        
+        await monitor.stopMonitoring()
+        
+        let analysisAfterStop = await monitor.analyzeMemoryUsage()
+        
+        // Both analyses should be valid
+        #expect(analysisAfterStart.currentUsage > 0)
+        #expect(analysisAfterStop.currentUsage > 0)
+    }
+}

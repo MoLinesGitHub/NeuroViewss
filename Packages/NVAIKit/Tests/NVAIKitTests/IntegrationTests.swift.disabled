@@ -1,0 +1,362 @@
+import Testing
+import Foundation
+import AVFoundation
+import CoreImage
+@testable import NVAIKit
+
+// MARK: - Integration Test Suite
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("Integration Tests")
+struct IntegrationTests {
+    
+    // MARK: - Component Integration Tests
+    
+    @Test("LiveAIProcessor integrates with all components")
+    func testLiveAIProcessorIntegration() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        // Test complete workflow
+        try await processor.startLiveAnalysis()
+        
+        // Process frame should integrate:
+        // - CompositionAnalyzer
+        // - VisionAnalysisEngine  
+        // - AISuggestionEngine
+        // - AIPerformanceMonitor
+        // - AdvancedPerformanceMonitor
+        
+        let analysis = try await processor.processFrame(mockFrame)
+        
+        #expect(analysis.composition.score >= 0)
+        #expect(analysis.vision.confidence >= 0)
+        #expect(analysis.quality.overallQuality >= 0)
+        #expect(analysis.overallScore >= 0)
+        
+        // Verify suggestions are generated
+        #expect(processor.suggestions.count >= 0)
+        
+        // Verify performance metrics are collected
+        let metrics = await processor.getCurrentMetrics()
+        #expect(metrics.totalFramesProcessed > 0)
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("CompositionAnalyzer and VisionEngine work together")
+    func testCompositionAndVisionIntegration() async throws {
+        let analyzer = CompositionAnalyzer()
+        let engine = VisionAnalysisEngine()
+        let mockFrame = createMockPixelBuffer()
+        
+        await analyzer.initialize()
+        await engine.initialize()
+        
+        // Both should analyze the same frame successfully
+        let compositionResult = await analyzer.analyzeComposition(mockFrame)
+        let visionResult = try await engine.analyzeFrame(mockFrame)
+        
+        #expect(compositionResult.score >= 0)
+        #expect(visionResult.confidence >= 0)
+        
+        // Results should be complementary
+        let combinedScore = (compositionResult.score + Double(visionResult.confidence)) / 2.0
+        #expect(combinedScore >= 0 && combinedScore <= 1.0)
+    }
+    
+    @Test("Performance monitoring integrates with processing")
+    func testPerformanceMonitoringIntegration() async throws {
+        let processor = LiveAIProcessor()
+        let monitor = await AdvancedPerformanceMonitor()
+        let mockFrame = createMockPixelBuffer()
+        
+        await monitor.startMonitoring()
+        try await processor.startLiveAnalysis()
+        
+        // Process multiple frames while monitoring
+        for _ in 0..<5 {
+            _ = try await processor.processFrame(mockFrame)
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        
+        let report = await monitor.getPerformanceReport()
+        let processorMetrics = await processor.getCurrentMetrics()
+        
+        #expect(report.sessionDuration > 0)
+        #expect(processorMetrics.totalFramesProcessed > 0)
+        
+        // Both monitoring systems should be tracking
+        #expect(report.memoryAnalysis.currentUsage > 0)
+        #expect(processorMetrics.memoryUsage > 0)
+        
+        await processor.stopLiveAnalysis()
+        await monitor.stopMonitoring()
+    }
+    
+    // MARK: - Data Flow Integration Tests
+    
+    @Test("Frame analysis data flows correctly through pipeline")
+    func testFrameAnalysisDataFlow() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        var analysisUpdates: [LiveAnalysis] = []
+        var suggestionUpdates: [[AISuggestion]] = []
+        
+        // Setup callbacks to track data flow
+        processor.onAnalysisUpdated = { analysis in
+            if let analysis = analysis {
+                analysisUpdates.append(analysis)
+            }
+        }
+        
+        processor.onSuggestionsUpdated = { suggestions in
+            suggestionUpdates.append(suggestions)
+        }
+        
+        try await processor.startLiveAnalysis()
+        
+        // Process multiple frames
+        for i in 0..<3 {
+            _ = try await processor.processFrame(mockFrame)
+            
+            // Wait for callbacks
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            
+            // Verify data flows through callbacks
+            #expect(analysisUpdates.count == i + 1, 
+                   "Analysis update \(i + 1) not received")
+            #expect(suggestionUpdates.count == i + 1, 
+                   "Suggestion update \(i + 1) not received")
+        }
+        
+        await processor.stopLiveAnalysis()
+        
+        // Verify final state
+        #expect(analysisUpdates.count == 3)
+        #expect(suggestionUpdates.count == 3)
+    }
+    
+    @Test("Suggestion engine integrates with analysis results")
+    func testSuggestionEngineIntegration() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        let analysis = try await processor.processFrame(mockFrame)
+        let suggestions = await processor.generateSuggestions(from: analysis)
+        
+        // Suggestions should be based on analysis
+        #expect(suggestions.count >= 0)
+        
+        // Verify suggestions are contextual to analysis
+        if analysis.quality.exposure < 0.4 {
+            let hasExposureSuggestion = suggestions.contains { suggestion in
+                if case .adjustExposure = suggestion { return true }
+                return false
+            }
+            // Should suggest exposure adjustment for low exposure
+            #expect(hasExposureSuggestion || suggestions.isEmpty)
+        }
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Error Handling Integration Tests
+    
+    @Test("Error handling propagates correctly through components")
+    func testErrorHandlingIntegration() async throws {
+        let processor = LiveAIProcessor()
+        
+        // Test starting analysis twice (should throw error)
+        try await processor.startLiveAnalysis()
+        
+        do {
+            try await processor.startLiveAnalysis()
+            Issue.record("Should have thrown alreadyProcessing error")
+        } catch let error as AIProcessingError {
+            #expect(error == .alreadyProcessing)
+            #expect(processor.processingError == nil) // Error shouldn't be stored
+        }
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("Component initialization order is correct")
+    func testComponentInitializationOrder() async throws {
+        let processor = LiveAIProcessor()
+        
+        // Components should be initialized during startLiveAnalysis
+        try await processor.startLiveAnalysis()
+        
+        #expect(processor.isProcessing == true)
+        
+        // Should be able to process frames immediately after start
+        let mockFrame = createMockPixelBuffer()
+        let analysis = try await processor.processFrame(mockFrame)
+        
+        #expect(analysis.timestamp != Date.distantPast)
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Memory Management Integration Tests
+    
+    @Test("Memory management across components")
+    func testMemoryManagementIntegration() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        let initialMetrics = await processor.getCurrentMetrics()
+        let initialMemory = initialMetrics.memoryUsage
+        
+        // Process frames and monitor memory across all components
+        for _ in 0..<20 {
+            _ = try await processor.processFrame(mockFrame)
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        }
+        
+        let midMetrics = await processor.getCurrentMetrics()
+        let midMemory = midMetrics.memoryUsage
+        
+        await processor.stopLiveAnalysis()
+        
+        // Allow time for cleanup
+        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        
+        let finalMetrics = await processor.getCurrentMetrics()
+        let finalMemory = finalMetrics.memoryUsage
+        
+        // Memory should not grow excessively during processing
+        let memoryGrowthDuringProcessing = midMemory - initialMemory
+        let memoryGrowthMB = Double(memoryGrowthDuringProcessing) / 1024 / 1024
+        
+        #expect(memoryGrowthMB < 100.0, 
+               "Memory growth during processing (\(memoryGrowthMB)MB) exceeds 100MB")
+        
+        // Memory should be released after stopping (within reasonable bounds)
+        let memoryAfterStop = finalMemory - initialMemory
+        let memoryAfterStopMB = Double(memoryAfterStop) / 1024 / 1024
+        
+        #expect(memoryAfterStopMB < 50.0,
+               "Memory not properly released after stop (\(memoryAfterStopMB)MB remaining)")
+    }
+    
+    // MARK: - Threading and Concurrency Integration Tests
+    
+    @Test("Thread safety across all components")
+    func testThreadSafetyIntegration() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Test concurrent access to processor from multiple tasks
+        await withTaskGroup(of: Bool.self) { group in
+            for i in 0..<5 {
+                group.addTask {
+                    do {
+                        // Mix different operations
+                        switch i % 3 {
+                        case 0:
+                            _ = try await processor.processFrame(mockFrame)
+                        case 1:
+                            _ = await processor.getCurrentMetrics()
+                        case 2:
+                            _ = await processor.getMemoryAnalysis()
+                        default:
+                            break
+                        }
+                        return true
+                    } catch {
+                        Issue.record("Concurrent operation failed: \(error)")
+                        return false
+                    }
+                }
+            }
+            
+            var successCount = 0
+            for await success in group {
+                if success { successCount += 1 }
+            }
+            
+            #expect(successCount == 5, "Some concurrent operations failed")
+        }
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Real-world Scenario Integration Tests
+    
+    @Test("Realistic camera session simulation")
+    func testRealisticCameraSessionSimulation() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        // Simulate a realistic camera session
+        try await processor.startLiveAnalysis()
+        
+        let sessionDuration: TimeInterval = 5.0 // 5 seconds
+        let targetFPS = 15.0
+        let frameInterval = 1.0 / targetFPS
+        
+        let startTime = CFAbsoluteTimeGetCurrent()
+        var frameCount = 0
+        var analysisCount = 0
+        
+        while CFAbsoluteTimeGetCurrent() - startTime < sessionDuration {
+            let frameStartTime = CFAbsoluteTimeGetCurrent()
+            
+            let analysis = try await processor.processFrame(mockFrame)
+            frameCount += 1
+            
+            if analysis.timestamp != Date.distantPast {
+                analysisCount += 1
+            }
+            
+            let frameProcessTime = CFAbsoluteTimeGetCurrent() - frameStartTime
+            let remainingTime = frameInterval - frameProcessTime
+            
+            if remainingTime > 0 {
+                try await Task.sleep(nanoseconds: UInt64(remainingTime * 1_000_000_000))
+            }
+        }
+        
+        let metrics = await processor.getCurrentMetrics()
+        
+        print("Realistic Session Results:")
+        print("Total frames: \(frameCount)")
+        print("Processed analyses: \(analysisCount)")
+        print("Average FPS: \(String(format: "%.1f", Double(frameCount) / sessionDuration))")
+        print("Final memory usage: \(metrics.formattedMemoryUsage)")
+        
+        #expect(frameCount > 50, "Should have processed at least 50 frames")
+        #expect(analysisCount > 0, "Should have completed some analyses")
+        #expect(metrics.totalFramesProcessed == analysisCount)
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}

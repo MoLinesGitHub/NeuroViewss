@@ -1,0 +1,334 @@
+import Testing
+import Foundation
+import AVFoundation
+@testable import NVAIKit
+
+// MARK: - Live AI Processor Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("LiveAIProcessor Tests")
+struct LiveAIProcessorTests {
+    
+    // MARK: - Test Properties
+    
+    var processor: LiveAIProcessor {
+        LiveAIProcessor()
+    }
+    
+    // MARK: - Initialization Tests
+    
+    @Test("LiveAIProcessor initializes correctly")
+    func testInitialization() async throws {
+        let processor = LiveAIProcessor()
+        
+        #expect(processor.currentAnalysis == nil)
+        #expect(processor.suggestions.isEmpty)
+        #expect(processor.isProcessing == false)
+        #expect(processor.processingError == nil)
+    }
+    
+    // MARK: - Live Analysis Tests
+    
+    @Test("Start live analysis succeeds")
+    func testStartLiveAnalysis() async throws {
+        let processor = LiveAIProcessor()
+        
+        try await processor.startLiveAnalysis()
+        
+        #expect(processor.isProcessing == true)
+    }
+    
+    @Test("Start live analysis fails when already processing")
+    func testStartLiveAnalysisAlreadyProcessing() async throws {
+        let processor = LiveAIProcessor()
+        
+        try await processor.startLiveAnalysis()
+        
+        do {
+            try await processor.startLiveAnalysis()
+            Issue.record("Should have thrown alreadyProcessing error")
+        } catch let error as AIProcessingError {
+            #expect(error == .alreadyProcessing)
+        }
+    }
+    
+    @Test("Stop live analysis works correctly")
+    func testStopLiveAnalysis() async throws {
+        let processor = LiveAIProcessor()
+        
+        try await processor.startLiveAnalysis()
+        await processor.stopLiveAnalysis()
+        
+        #expect(processor.isProcessing == false)
+        #expect(processor.currentAnalysis == nil)
+        #expect(processor.suggestions.isEmpty)
+    }
+    
+    // MARK: - Frame Processing Tests
+    
+    @Test("Process frame returns empty when throttled")
+    func testProcessFrameThrottling() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Process first frame
+        let analysis1 = try await processor.processFrame(mockFrame)
+        #expect(analysis1.timestamp != Date.distantPast)
+        
+        // Process second frame immediately (should be throttled)
+        let analysis2 = try await processor.processFrame(mockFrame)
+        #expect(analysis2.timestamp == Date.distantPast) // Empty analysis
+    }
+    
+    @Test("Process frame updates current analysis")
+    func testProcessFrameUpdatesAnalysis() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        let analysis = try await processor.processFrame(mockFrame)
+        
+        #expect(processor.currentAnalysis != nil)
+        #expect(processor.currentAnalysis?.frameAnalysis.timestamp == analysis.timestamp)
+    }
+    
+    // MARK: - Performance Tests
+    
+    @Test("Get current metrics returns valid data")
+    func testGetCurrentMetrics() async throws {
+        let processor = LiveAIProcessor()
+        
+        let metrics = await processor.getCurrentMetrics()
+        
+        #expect(metrics.averageProcessingTime >= 0)
+        #expect(metrics.currentFPS >= 0)
+        #expect(metrics.totalFramesProcessed >= 0)
+        #expect(metrics.memoryUsage >= 0)
+    }
+    
+    @Test("Device optimization runs without errors")
+    func testOptimizeForDevice() async throws {
+        let processor = LiveAIProcessor()
+        
+        // Should not throw
+        await processor.optimizeForDevice()
+    }
+    
+    @Test("Advanced performance report is accessible")
+    func testAdvancedPerformanceReport() async throws {
+        let processor = LiveAIProcessor()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Give some time for monitoring to start
+        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        
+        let report = await processor.getAdvancedPerformanceReport()
+        
+        // Report might be nil if advanced monitoring isn't fully initialized
+        if let report = report {
+            #expect(report.sessionDuration >= 0)
+            #expect(!report.systemCapabilities.operatingSystem.isEmpty)
+        }
+    }
+    
+    @Test("Memory analysis provides valid data")
+    func testMemoryAnalysis() async throws {
+        let processor = LiveAIProcessor()
+        
+        try await processor.startLiveAnalysis()
+        
+        let analysis = await processor.getMemoryAnalysis()
+        
+        // Analysis might be nil if advanced monitoring isn't fully initialized
+        if let analysis = analysis {
+            #expect(analysis.currentUsage >= 0)
+            #expect(analysis.peakUsage >= analysis.currentUsage)
+            #expect(analysis.averageUsage >= 0)
+        }
+    }
+    
+    // MARK: - Suggestion Generation Tests
+    
+    @Test("Generate suggestions from analysis")
+    func testGenerateSuggestions() async throws {
+        let processor = LiveAIProcessor()
+        let analysis = FrameAnalysis.empty()
+        
+        let suggestions = await processor.generateSuggestions(from: analysis)
+        
+        #expect(suggestions.count >= 0)
+    }
+    
+    // MARK: - Callback Tests
+    
+    @Test("Analysis updated callback is triggered")
+    func testAnalysisUpdatedCallback() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        var callbackTriggered = false
+        
+        processor.onAnalysisUpdated = { analysis in
+            callbackTriggered = analysis != nil
+        }
+        
+        try await processor.startLiveAnalysis()
+        _ = try await processor.processFrame(mockFrame)
+        
+        // Give callback time to execute
+        try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        
+        #expect(callbackTriggered == true)
+    }
+    
+    @Test("Suggestions updated callback is triggered")
+    func testSuggestionsUpdatedCallback() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        var callbackTriggered = false
+        
+        processor.onSuggestionsUpdated = { suggestions in
+            callbackTriggered = true
+        }
+        
+        try await processor.startLiveAnalysis()
+        _ = try await processor.processFrame(mockFrame)
+        
+        // Give callback time to execute
+        try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        
+        #expect(callbackTriggered == true)
+    }
+    
+    @Test("Processing state changed callback is triggered")
+    func testProcessingStateChangedCallback() async throws {
+        let processor = LiveAIProcessor()
+        var stateChanges: [Bool] = []
+        
+        processor.onProcessingStateChanged = { isProcessing in
+            stateChanges.append(isProcessing)
+        }
+        
+        try await processor.startLiveAnalysis()
+        await processor.stopLiveAnalysis()
+        
+        // Give callbacks time to execute
+        try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        
+        // Should have at least captured the stop state
+        #expect(!stateChanges.isEmpty)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
+
+// MARK: - Live Analysis Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("LiveAnalysis Tests")
+struct LiveAnalysisTests {
+    
+    @Test("LiveAnalysis initializes correctly")
+    func testLiveAnalysisInitialization() {
+        let frameAnalysis = FrameAnalysis.empty()
+        let timestamp = Date()
+        let processingTime: TimeInterval = 0.1
+        
+        let liveAnalysis = LiveAnalysis(
+            frameAnalysis: frameAnalysis,
+            timestamp: timestamp,
+            processingTime: processingTime
+        )
+        
+        #expect(liveAnalysis.frameAnalysis.timestamp == frameAnalysis.timestamp)
+        #expect(liveAnalysis.timestamp == timestamp)
+        #expect(liveAnalysis.processingTime == processingTime)
+    }
+    
+    @Test("Recent analysis detection works")
+    func testIsRecentAnalysis() {
+        let frameAnalysis = FrameAnalysis.empty()
+        let recentTimestamp = Date()
+        let oldTimestamp = Date().addingTimeInterval(-1.0) // 1 second ago
+        
+        let recentAnalysis = LiveAnalysis(
+            frameAnalysis: frameAnalysis,
+            timestamp: recentTimestamp,
+            processingTime: 0.1
+        )
+        
+        let oldAnalysis = LiveAnalysis(
+            frameAnalysis: frameAnalysis,
+            timestamp: oldTimestamp,
+            processingTime: 0.1
+        )
+        
+        #expect(recentAnalysis.isRecentAnalysis == true)
+        #expect(oldAnalysis.isRecentAnalysis == false)
+    }
+}
+
+// MARK: - Frame Analysis Tests
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("FrameAnalysis Tests")
+struct FrameAnalysisTests {
+    
+    @Test("FrameAnalysis empty creates valid instance")
+    func testFrameAnalysisEmpty() {
+        let analysis = FrameAnalysis.empty()
+        
+        #expect(analysis.composition.score == 0.7) // neutral score
+        #expect(analysis.quality.overallQuality == 0.5) // unknown quality
+        #expect(analysis.vision.confidence == 0.0) // empty vision
+    }
+    
+    @Test("Overall score calculation is correct")
+    func testOverallScoreCalculation() {
+        let analysis = FrameAnalysis.empty()
+        
+        let expectedScore = (analysis.composition.score + analysis.quality.overallQuality) / 2.0
+        
+        #expect(analysis.overallScore == expectedScore)
+    }
+    
+    @Test("FrameAnalysis initializes with custom values")
+    func testFrameAnalysisCustomInitialization() {
+        let composition = CompositionSuggestion.excellent(["Great composition!"])
+        let vision = VisionAnalysisResult.empty()
+        let quality = ImageQualityAnalysis.unknown()
+        let timestamp = Date()
+        
+        let analysis = FrameAnalysis(
+            composition: composition,
+            vision: vision,
+            quality: quality,
+            timestamp: timestamp
+        )
+        
+        #expect(analysis.composition.score == 0.9) // excellent score
+        #expect(analysis.vision.confidence == 0.0)
+        #expect(analysis.quality.overallQuality == 0.5)
+        #expect(analysis.timestamp == timestamp)
+    }
+}

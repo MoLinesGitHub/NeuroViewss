@@ -1,0 +1,383 @@
+import Testing
+import Foundation
+import AVFoundation
+@testable import NVAIKit
+
+// MARK: - Performance Test Suite
+
+@Suite("Performance Tests")
+struct PerformanceTests {
+    
+    // MARK: - Camera Capture Latency Tests
+    
+    @Test("Camera capture latency is within acceptable bounds", 
+          .timeLimit(.minutes(1)))
+    func testCameraCaptureLatency() async throws {
+        guard #available(iOS 15.0, macOS 12.0, *) else { return }
+        
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        _ = try await processor.processFrame(mockFrame)
+        
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let latency = endTime - startTime
+        
+        // Capture should complete within 500ms
+        #expect(latency < 0.5, "Camera capture latency (\(latency)s) exceeds 500ms threshold")
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("AI processing throughput meets requirements")
+    func testAIProcessingThroughput() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        let frameCount = 10
+        
+        try await processor.startLiveAnalysis()
+        
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        for _ in 0..<frameCount {
+            _ = try await processor.processFrame(mockFrame)
+            // Small delay to avoid throttling
+            try await Task.sleep(nanoseconds: 70_000_000) // 70ms
+        }
+        
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let totalTime = endTime - startTime
+        let throughput = Double(frameCount) / totalTime
+        
+        // Should process at least 10 FPS
+        #expect(throughput >= 10.0, "AI processing throughput (\(throughput) FPS) below 10 FPS requirement")
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("Memory usage under stress remains stable")
+    func testMemoryUsageUnderStress() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Get initial memory usage
+        let initialMetrics = await processor.getCurrentMetrics()
+        let initialMemory = initialMetrics.memoryUsage
+        
+        // Process many frames to stress test
+        for i in 0..<50 {
+            _ = try await processor.processFrame(mockFrame)
+            
+            // Vary timing to test different scenarios
+            let delay = i % 2 == 0 ? 50_000_000 : 100_000_000 // 50ms or 100ms
+            try await Task.sleep(nanoseconds: UInt64(delay))
+        }
+        
+        // Check final memory usage
+        let finalMetrics = await processor.getCurrentMetrics()
+        let finalMemory = finalMetrics.memoryUsage
+        
+        let memoryIncrease = finalMemory - initialMemory
+        let memoryIncreasePercent = (memoryIncrease / initialMemory) * 100
+        
+        // Memory increase should not exceed 50% of initial usage
+        #expect(memoryIncreasePercent < 50.0, 
+               "Memory usage increased by \(memoryIncreasePercent)% which exceeds 50% threshold")
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Advanced Performance Monitor Tests
+    
+    @Test("Advanced performance monitor initialization")
+    func testAdvancedPerformanceMonitorInitialization() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        let report = await monitor.getPerformanceReport()
+        
+        #expect(report.sessionDuration >= 0)
+        #expect(report.systemCapabilities.cpuCores > 0)
+        #expect(report.systemCapabilities.physicalMemory > 0)
+    }
+    
+    @Test("Performance monitoring tracks operations correctly")
+    func testPerformanceMonitoringTracking() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        await monitor.startMonitoring()
+        
+        // Track a simple operation
+        let result = await monitor.trackOperation("test_operation") {
+            try await Task.sleep(nanoseconds: 10_000_000) // 10ms
+            return "completed"
+        }
+        
+        #expect(result == "completed")
+        
+        let report = await monitor.getPerformanceReport()
+        
+        #expect(!report.operationStatistics.isEmpty)
+        
+        let testOperation = report.operationStatistics.first { $0.name == "test_operation" }
+        #expect(testOperation != nil, "Test operation should be tracked")
+        
+        if let operation = testOperation {
+            #expect(operation.executionCount > 0)
+            #expect(operation.averageDuration > 0)
+        }
+        
+        await monitor.stopMonitoring()
+    }
+    
+    @Test("Memory analysis provides accurate data")
+    func testMemoryAnalysis() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        let memoryAnalysis = await monitor.analyzeMemoryUsage()
+        
+        #expect(memoryAnalysis.currentUsage > 0)
+        #expect(memoryAnalysis.peakUsage >= memoryAnalysis.currentUsage)
+        #expect(memoryAnalysis.averageUsage > 0)
+        #expect(!memoryAnalysis.recommendations.isEmpty)
+    }
+    
+    @Test("Pipeline optimization runs without errors")
+    func testPipelineOptimization() async throws {
+        let monitor = await AdvancedPerformanceMonitor()
+        
+        // Should not throw any errors
+        try await monitor.optimizePipeline()
+    }
+    
+    // MARK: - Composition Analyzer Performance Tests
+    
+    @Test("Composition analysis performance benchmark")
+    func testCompositionAnalysisPerformance() async throws {
+        let analyzer = CompositionAnalyzer()
+        let mockFrame = createMockPixelBuffer()
+        
+        await analyzer.initialize()
+        
+        let iterations = 20
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        for _ in 0..<iterations {
+            _ = await analyzer.analyzeComposition(mockFrame)
+        }
+        
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let averageTime = (endTime - startTime) / Double(iterations)
+        
+        // Each analysis should complete within 100ms
+        #expect(averageTime < 0.1, "Composition analysis average time (\(averageTime)s) exceeds 100ms")
+    }
+    
+    @Test("Vision analysis engine performance benchmark")
+    func testVisionAnalysisPerformance() async throws {
+        let engine = VisionAnalysisEngine()
+        let mockFrame = createMockPixelBuffer()
+        
+        await engine.initialize()
+        
+        let iterations = 10
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        for _ in 0..<iterations {
+            _ = try await engine.analyzeFrame(mockFrame)
+        }
+        
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let averageTime = (endTime - startTime) / Double(iterations)
+        
+        // Each vision analysis should complete within 200ms
+        #expect(averageTime < 0.2, "Vision analysis average time (\(averageTime)s) exceeds 200ms")
+    }
+    
+    // MARK: - Concurrent Processing Tests
+    
+    @Test("Concurrent frame processing stability")
+    func testConcurrentProcessingStability() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Process frames concurrently
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<10 {
+                group.addTask {
+                    do {
+                        _ = try await processor.processFrame(mockFrame)
+                    } catch {
+                        Issue.record("Concurrent processing failed at iteration \(i): \(error)")
+                    }
+                }
+                
+                // Stagger the starts slightly
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+            }
+        }
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("Performance under memory pressure simulation")
+    func testPerformanceUnderMemoryPressure() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        // Simulate memory pressure by creating large data structures
+        var memoryHogs: [Data] = []
+        
+        for i in 0..<10 {
+            // Create 10MB chunks
+            memoryHogs.append(Data(repeating: UInt8(i), count: 10 * 1024 * 1024))
+            
+            let startTime = CFAbsoluteTimeGetCurrent()
+            _ = try await processor.processFrame(mockFrame)
+            let endTime = CFAbsoluteTimeGetCurrent()
+            
+            let processingTime = endTime - startTime
+            
+            // Processing should still complete within reasonable time even under memory pressure
+            #expect(processingTime < 1.0, 
+                   "Processing time (\(processingTime)s) under memory pressure exceeds 1s at iteration \(i)")
+        }
+        
+        // Clean up memory
+        memoryHogs.removeAll()
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
+
+// MARK: - Performance Benchmarks
+
+@available(iOS 15.0, macOS 12.0, *)
+@Suite("Performance Benchmarks")
+struct PerformanceBenchmarks {
+    
+    @Test("End-to-end processing benchmark", 
+          .timeLimit(.seconds(30)))
+    func testEndToEndProcessingBenchmark() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        var processingTimes: [TimeInterval] = []
+        let benchmarkIterations = 100
+        
+        for _ in 0..<benchmarkIterations {
+            let startTime = CFAbsoluteTimeGetCurrent()
+            
+            _ = try await processor.processFrame(mockFrame)
+            
+            let endTime = CFAbsoluteTimeGetCurrent()
+            processingTimes.append(endTime - startTime)
+            
+            // Wait to avoid throttling
+            try await Task.sleep(nanoseconds: 20_000_000) // 20ms
+        }
+        
+        let averageTime = processingTimes.reduce(0, +) / Double(processingTimes.count)
+        let maxTime = processingTimes.max() ?? 0
+        let minTime = processingTimes.min() ?? 0
+        
+        print("Performance Benchmark Results:")
+        print("Average processing time: \(String(format: "%.2f", averageTime * 1000))ms")
+        print("Max processing time: \(String(format: "%.2f", maxTime * 1000))ms")
+        print("Min processing time: \(String(format: "%.2f", minTime * 1000))ms")
+        
+        // Performance requirements
+        #expect(averageTime < 0.1, "Average processing time exceeds 100ms")
+        #expect(maxTime < 0.5, "Maximum processing time exceeds 500ms")
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    @Test("Memory efficiency benchmark")
+    func testMemoryEfficiencyBenchmark() async throws {
+        let processor = LiveAIProcessor()
+        let mockFrame = createMockPixelBuffer()
+        
+        try await processor.startLiveAnalysis()
+        
+        let initialMetrics = await processor.getCurrentMetrics()
+        let initialMemory = initialMetrics.memoryUsage
+        
+        // Process frames continuously for a period
+        let benchmarkDuration: TimeInterval = 10.0 // 10 seconds
+        let startTime = CFAbsoluteTimeGetCurrent()
+        var frameCount = 0
+        
+        while CFAbsoluteTimeGetCurrent() - startTime < benchmarkDuration {
+            _ = try await processor.processFrame(mockFrame)
+            frameCount += 1
+            
+            try await Task.sleep(nanoseconds: 33_000_000) // ~30 FPS
+        }
+        
+        let finalMetrics = await processor.getCurrentMetrics()
+        let finalMemory = finalMetrics.memoryUsage
+        let memoryGrowth = finalMemory - initialMemory
+        
+        print("Memory Efficiency Benchmark Results:")
+        print("Processed frames: \(frameCount)")
+        print("Initial memory: \(String(format: "%.1f", Double(initialMemory) / 1024 / 1024))MB")
+        print("Final memory: \(String(format: "%.1f", Double(finalMemory) / 1024 / 1024))MB")
+        print("Memory growth: \(String(format: "%.1f", Double(memoryGrowth) / 1024 / 1024))MB")
+        
+        // Memory growth should be minimal
+        let memoryGrowthMB = Double(memoryGrowth) / 1024 / 1024
+        #expect(memoryGrowthMB < 50.0, "Memory growth (\(memoryGrowthMB)MB) exceeds 50MB limit")
+        
+        await processor.stopLiveAnalysis()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createMockPixelBuffer() -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            640, 480,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
+            fatalError("Failed to create mock pixel buffer")
+        }
+        
+        return buffer
+    }
+}
