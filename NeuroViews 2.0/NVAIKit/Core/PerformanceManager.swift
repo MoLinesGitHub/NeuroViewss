@@ -11,6 +11,13 @@ import CoreImage
 import AVFoundation
 import os.log
 
+// MARK: - Analysis Priority
+public enum AnalysisPriority: Int, CaseIterable {
+    case low = 0
+    case normal = 1
+    case high = 2
+}
+
 @available(iOS 15.0, macOS 12.0, *)
 public final class PerformanceManager {
     
@@ -110,7 +117,7 @@ public final class PerformanceManager {
             let priority: AnalysisPriority
         }
         
-        public enum AnalysisPriority: Int, CaseIterable {
+        enum AnalysisPriority: Int, CaseIterable {
             case low = 0
             case normal = 1
             case high = 2
@@ -381,8 +388,9 @@ public final class PerformanceManager {
     
     // MARK: - Frame Buffer Management
     
-    public func addFrameToBuffer(_ pixelBuffer: CVPixelBuffer, timestamp: CFTimeInterval, priority: FrameBuffer.AnalysisPriority = .normal) {
-        frameBuffer.addFrame(pixelBuffer, timestamp: timestamp, priority: priority)
+    public func addFrameToBuffer(_ pixelBuffer: CVPixelBuffer, timestamp: CFTimeInterval, priority: AnalysisPriority = .normal) {
+        let bufferPriority = FrameBuffer.AnalysisPriority(rawValue: priority.rawValue) ?? .normal
+        frameBuffer.addFrame(pixelBuffer, timestamp: timestamp, priority: bufferPriority)
     }
     
     public func processNextFrameFromBuffer(completion: @escaping (CVPixelBuffer?) -> Void) {

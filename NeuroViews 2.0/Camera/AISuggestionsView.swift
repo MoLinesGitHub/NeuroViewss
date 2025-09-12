@@ -53,7 +53,7 @@ struct AISuggestionsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                         .background(Color.black.opacity(0.7))
-                        .cornerRadius(12, corners: [.bottomLeft, .bottomRight])
+                        .cornerRadius(12)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     } else {
                         // Show only highest priority suggestion when collapsed
@@ -62,7 +62,7 @@ struct AISuggestionsView: View {
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
                                 .background(Color.black.opacity(0.7))
-                                .cornerRadius(12, corners: [.bottomLeft, .bottomRight])
+                                .cornerRadius(12)
                         }
                     }
                 }

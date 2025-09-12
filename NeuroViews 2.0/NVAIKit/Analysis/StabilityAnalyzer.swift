@@ -35,8 +35,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
     private let stabilityHistoryLimit = 5
     
     // MARK: - Initialization
-    override init() {
-        super.init()
+    public init() {
         setupMotionTracking()
     }
     

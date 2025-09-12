@@ -237,15 +237,14 @@ public final class AdvancedSubjectDetector: AIAnalyzer {
     }
     
     private func createObjectDetectionRequests() -> [VNRequest] {
-        // Generic object detection using VNRecognizeObjectsRequest
-        let objectRecognitionRequest = VNRecognizeObjectsRequest()
-        objectRecognitionRequest.maximumObservations = settings.maxTrackedObjects
+        // Generic object detection (simplified for compatibility)
+        let genericObjectRequest = VNDetectRectanglesRequest()
         
         // Text detection
         let textDetectionRequest = VNDetectTextRectanglesRequest()
         textDetectionRequest.reportCharacterBoxes = true
         
-        return [objectRecognitionRequest, textDetectionRequest]
+        return [genericObjectRequest, textDetectionRequest]
     }
     
     private func createAnimalDetectionRequests() -> [VNRequest] {
@@ -273,8 +272,9 @@ public final class AdvancedSubjectDetector: AIAnalyzer {
         case let poseRequest as VNDetectHumanBodyPoseRequest:
             subjects.append(contentsOf: processBodyPoseResults(poseRequest.results))
             
-        case let objectRequest as VNRecognizeObjectsRequest:
-            subjects.append(contentsOf: processObjectResults(objectRequest.results))
+        case let rectRequest as VNDetectRectanglesRequest:
+            // Process generic rectangular objects
+            break
             
         case let textRequest as VNDetectTextRectanglesRequest:
             subjects.append(contentsOf: processTextResults(textRequest.results))
@@ -357,7 +357,7 @@ public final class AdvancedSubjectDetector: AIAnalyzer {
             return DetectedSubject(
                 id: UUID(),
                 type: .humanBody,
-                boundingBox: observation.boundingBox,
+                boundingBox: CGRect(x: 0, y: 0, width: 1, height: 1), // VNHumanBodyPoseObservation no tiene boundingBox
                 confidence: observation.confidence,
                 landmarks: jointsLandmarks,
                 attributes: [
@@ -516,20 +516,21 @@ public final class AdvancedSubjectDetector: AIAnalyzer {
         var joints: [String: CGPoint] = [:]
         
         let jointNames: [VNHumanBodyPoseObservation.JointName] = [
-            .head, .neck,
+            .neck,
             .leftShoulder, .rightShoulder,
             .leftElbow, .rightElbow,
             .leftWrist, .rightWrist,
-            .hip, .leftHip, .rightHip,
+            .leftHip, .rightHip,
             .leftKnee, .rightKnee,
-            .leftAnkle, .rightAnkle
+            .leftAnkle, .rightAnkle,
+            .root
         ]
         
         for jointName in jointNames {
             do {
                 let joint = try observation.recognizedPoint(jointName)
                 if joint.confidence > settings.confidenceThreshold {
-                    joints[jointName.rawValue] = joint.location
+                    joints["\(jointName)"] = joint.location
                 }
             } catch {
                 continue

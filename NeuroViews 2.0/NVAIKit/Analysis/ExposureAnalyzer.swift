@@ -116,7 +116,7 @@ public final class ExposureAnalyzer: AIAnalyzer {
         
         // Calculate EV (Exposure Value) estimation
         let meanLuminance = calculateMeanLuminance(histogram: histogram)
-        let evValue = luminanceToEV(meanLuminance)
+        let evValue = luminanceToEV(luminance: meanLuminance)
         
         // Detect clipping
         let clippingLevel = detectClipping(histogram: histogram)
@@ -167,7 +167,7 @@ public final class ExposureAnalyzer: AIAnalyzer {
                 
                 if let regionHistogram = getLuminanceHistogram(image: regionImage) {
                     let meanLuminance = calculateMeanLuminance(histogram: regionHistogram)
-                    let evValue = luminanceToEV(meanLuminance)
+                    let evValue = luminanceToEV(luminance: meanLuminance)
                     
                     regions.append(RegionExposure(
                         region: regionRect,

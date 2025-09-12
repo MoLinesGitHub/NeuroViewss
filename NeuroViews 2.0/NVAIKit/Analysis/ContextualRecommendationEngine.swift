@@ -288,7 +288,7 @@ public final class ContextualRecommendationEngine: AIAnalyzer {
         let priority: SuggestionPriority
         let title: String
         let message: String
-        let detailedExplanation: String
+        var detailedExplanation: String
         let actionable: Bool
         let estimatedImpact: ImpactLevel
         let relevanceScore: Float
@@ -401,12 +401,28 @@ public final class ContextualRecommendationEngine: AIAnalyzer {
     
     private func performContextualAnalysis(image: CIImage) -> ContextualRecommendationResult {
         // Get individual analyzer results
-        let compositionResult = compositionAnalyzer.analyze(frame: pixelBufferFromImage(image))
-        let lightingResult = lightingAnalyzer.analyze(frame: pixelBufferFromImage(image))
-        let subjectResult = subjectDetector.analyze(frame: pixelBufferFromImage(image))
-        let exposureResult = exposureAnalyzer.analyze(frame: pixelBufferFromImage(image))
-        let stabilityResult = stabilityAnalyzer.analyze(frame: pixelBufferFromImage(image))
-        let focusResult = focusAnalyzer.analyze(frame: pixelBufferFromImage(image))
+        guard let pixelBuffer = pixelBufferFromImage(image) else {
+            return ContextualRecommendationResult(
+                primaryRecommendations: [],
+                secondaryRecommendations: [],
+                contextualInsights: [],
+                sceneAnalysis: SceneAnalysis(
+                    detectedScene: .unknown,
+                    confidence: 0.0,
+                    contextFactors: [:],
+                    suggestedMode: .auto,
+                    optimalSettings: [:]
+                ),
+                confidenceScore: 0.0
+            )
+        }
+        
+        let compositionResult = compositionAnalyzer.analyze(frame: pixelBuffer)
+        let lightingResult = lightingAnalyzer.analyze(frame: pixelBuffer)
+        let subjectResult = subjectDetector.analyze(frame: pixelBuffer)
+        let exposureResult = exposureAnalyzer.analyze(frame: pixelBuffer)
+        let stabilityResult = stabilityAnalyzer.analyze(frame: pixelBuffer)
+        let focusResult = focusAnalyzer.analyze(frame: pixelBuffer)
         
         // Update current context based on analysis
         updateContextFromAnalysis([
