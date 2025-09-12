@@ -37,8 +37,8 @@
 "camera.starting.announcement" = "Camera interface starting";
 
 // MARK: - Status
-"week.status" = "Week 14: Accessibility & Localization ✅";
-"status.accessibility" = "Current status: Week 14, Accessibility and Localization completed";
+"week.status" = "Week 15: Testing & Quality Assurance ✅";
+"status.accessibility" = "Current status: Week 15, Testing and Quality Assurance completed";
 
 // MARK: - Main Interface
 "main.title" = "NeuroViews 2.0";

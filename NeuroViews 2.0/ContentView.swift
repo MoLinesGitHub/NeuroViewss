@@ -13,39 +13,7 @@ struct ContentView: View {
     @Query private var items: [Item]
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label(NSLocalizedString("add.item", 
-                                               value: "Add Item", 
-                                               comment: "Button to add new item"), systemImage: "plus")
-                    }
-                    .accessibilityLabel(NSLocalizedString("add.item", 
-                                                        value: "Add Item", 
-                                                        comment: "Button to add new item"))
-                    .accessibilityHint("Adds a new item to the list")
-                }
-            }
-        } detail: {
+        NavigationView {
             VStack(spacing: 20) {
                 Text(NSLocalizedString("main.title", 
                                    value: "NeuroViews 2.0", 
@@ -87,19 +55,26 @@ struct ContentView: View {
                 }
                 
                 Text(NSLocalizedString("week.status", 
-                                   value: "Week 14: Accessibility & Localization ✅", 
+                                   value: "Week 15: Testing & Quality Assurance ✅", 
                                    comment: "Current week status"))
                     .font(.caption)
                     .foregroundColor(.green)
                     .fontWeight(.semibold)
                     .accessibilityLabel(NSLocalizedString("status.accessibility", 
-                                                        value: "Current status: Week 14, Accessibility and Localization completed", 
+                                                        value: "Current status: Week 15, Testing and Quality Assurance completed", 
                                                         comment: "Accessibility label for status"))
                 
                 Spacer()
             }
             .padding()
+            .navigationTitle("NeuroViews")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
         }
+#if os(iOS)
+        .navigationViewStyle(StackNavigationViewStyle())
+#endif
     }
 
     private func addItem() {
