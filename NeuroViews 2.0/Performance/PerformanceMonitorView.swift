@@ -14,13 +14,13 @@ struct PerformanceMonitorView: View {
     @StateObject private var performanceMonitor = PerformanceMonitor.shared
     @StateObject private var memoryOptimizer = MemoryOptimizer.shared
     @StateObject private var batteryOptimizer = BatteryOptimizer.shared
-    @StateObject private var nvaiKit = NVAIKit.shared
+    private let nvaiKit = NVAIKit.shared
     
     @State private var showingDetailedReport = false
     @State private var showingMemoryDetails = false
     @State private var showingBatteryDetails = false
     @State private var isRunningTests = false
-    @State private var testResults: PerformanceTestResults?
+    @State private var testResults: TestRunnerResults?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -239,7 +239,7 @@ struct PerformanceMonitorView: View {
                             await performanceMonitor.stopMonitoring()
                             await memoryOptimizer.stopOptimization()
                             await batteryOptimizer.stopOptimization()
-                            await nvaiKit.stopPerformanceOptimization()
+                            await UnifiedPerformanceSystem.shared.stopOptimization()
                         }
                     }
                     .buttonStyle(SecondaryButtonStyle())
@@ -308,7 +308,7 @@ struct PerformanceMonitorView: View {
         .padding(32)
     }
     
-    private func testResultsSection(_ results: PerformanceTestResults) -> some View {
+    private func testResultsSection(_ results: TestRunnerResults) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Resultados de Tests")

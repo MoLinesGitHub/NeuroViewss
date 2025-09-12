@@ -108,16 +108,25 @@ public final class SmartExposureAssistant: ObservableObject {
             device.exposureMode = .continuousAutoExposure
             
         case .manual(let settings):
+            #if os(iOS) || os(tvOS)
             if device.isExposureModeSupported(.custom) {
                 device.exposureMode = .custom
                 device.setExposureModeCustom(duration: settings.shutterSpeed,
                                            iso: settings.iso) { _ in }
             }
+            #else
+            // macOS doesn't support custom exposure settings
+            print("Manual exposure not supported on macOS")
+            #endif
             
         case .exposureCompensation(let compensation):
             if device.isExposureModeSupported(.continuousAutoExposure) {
                 device.exposureMode = .continuousAutoExposure
+                #if os(iOS) || os(tvOS)
                 device.setExposureTargetBias(compensation) { _ in }
+                #else
+                print("Exposure compensation not supported on macOS")
+                #endif
             }
         }
     }

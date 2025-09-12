@@ -25,7 +25,7 @@ public actor MemoryOptimizer: ObservableObject {
     @MainActor @Published public private(set) var isOptimizing = false
     
     // MARK: - Private Properties
-    private var memoryMonitorTimer: Timer?
+    @MainActor private var memoryMonitorTimer: Timer?
     private let logger = Logger(subsystem: "com.neuroviews.performance", category: "memory")
     
     // Memory tracking
@@ -43,10 +43,8 @@ public actor MemoryOptimizer: ObservableObject {
     private var pixelBufferPool: CVPixelBufferPool?
     private var poolAttributes: [String: Any] = [:]
     
-    private init() {
-        setupMemoryMonitoring()
-        setupMemoryPressureHandling()
-        recordBaseline()
+    nonisolated private init() {
+        // Setup será manejado en startOptimization()
     }
     
     // MARK: - Public Methods
@@ -171,10 +169,11 @@ public actor MemoryOptimizer: ObservableObject {
     
     private func setupMemoryMonitoring() {
         baselineMemory = getCurrentMemoryUsage()
-        logger.info("📊 Baseline memory: \(baselineMemory / 1_000_000)MB")
+        logger.info("📊 Baseline memory: \(self.baselineMemory / 1_000_000)MB")
     }
     
     private func setupMemoryPressureHandling() {
+        #if os(iOS) || os(tvOS)
         NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
@@ -184,6 +183,10 @@ public actor MemoryOptimizer: ObservableObject {
                 await self?.handleMemoryPressure()
             }
         }
+        #else
+        // macOS doesn't have memory warnings, use timer-based monitoring
+        logger.info("🍎 Using timer-based memory monitoring on macOS")
+        #endif
     }
     
     private func recordBaseline() {

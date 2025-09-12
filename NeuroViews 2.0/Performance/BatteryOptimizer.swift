@@ -50,9 +50,8 @@ public actor BatteryOptimizer: ObservableObject {
     private var baselineConsumption: Double = 0.0
     private var aiAnalysisConsumption: Double = 0.0
     
-    private init() {
-        setupBatteryMonitoring()
-        setupThermalMonitoring()
+    nonisolated private init() {
+        // Setup será manejado en startOptimization()
     }
     
     // MARK: - Public Methods

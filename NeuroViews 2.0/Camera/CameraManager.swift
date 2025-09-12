@@ -83,11 +83,20 @@ final class CameraManager: NSObject, ObservableObject {
         super.init()
         
         // Create device discovery session
+        #if os(iOS) || os(tvOS)
         videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera],
             mediaType: .video,
             position: .unspecified
         )
+        #else
+        // macOS - use available camera devices
+        videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera],
+            mediaType: .video,
+            position: .unspecified
+        )
+        #endif
         
         // Request camera authorization
         requestCameraAuthorization()
@@ -246,12 +255,14 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Device Selection
     nonisolated private func defaultVideoDevice(for position: AVCaptureDevice.Position = .back) -> AVCaptureDevice? {
-        // Prefer dual camera if available
+        // Prefer dual camera if available (iOS only)
+        #if os(iOS) || os(tvOS)
         if let dualCameraDevice = videoDeviceDiscoverySession?.devices.first(where: { 
             $0.deviceType == .builtInDualCamera && $0.position == position 
         }) {
             return dualCameraDevice
         }
+        #endif
         
         // Fall back to wide angle camera
         if let wideAngleDevice = videoDeviceDiscoverySession?.devices.first(where: { 
@@ -312,6 +323,7 @@ final class CameraManager: NSObject, ObservableObject {
             
             // Configure photo settings (format is read-only, let's configure other settings)
             
+            #if os(iOS) || os(tvOS)
             if !photoSettings.__availablePreviewPhotoPixelFormatTypes.isEmpty {
                 photoSettings.previewPhotoFormat = [
                     kCVPixelBufferPixelFormatTypeKey as String: photoSettings.__availablePreviewPhotoPixelFormatTypes.first!,
@@ -319,6 +331,7 @@ final class CameraManager: NSObject, ObservableObject {
                     kCVPixelBufferHeightKey as String: 160
                 ]
             }
+            #endif
             
             photoSettings.isHighResolutionPhotoEnabled = true
             if #available(iOS 13.0, *) {
@@ -388,6 +401,7 @@ final class CameraManager: NSObject, ObservableObject {
     func setZoom(_ factor: CGFloat) {
         guard let device = videoDeviceInput?.device else { return }
         
+        #if os(iOS) || os(tvOS)
         let clampedFactor = min(max(factor, 1.0), device.activeFormat.videoMaxZoomFactor)
         
         do {
@@ -404,6 +418,13 @@ final class CameraManager: NSObject, ObservableObject {
                 self.errorMessage = "Unable to adjust zoom"
             }
         }
+        #else
+        // macOS doesn't support video zoom factor
+        let clampedFactor = factor
+        DispatchQueue.main.async {
+            self.zoomFactor = clampedFactor
+        }
+        #endif
     }
     
     // MARK: - Focus Control

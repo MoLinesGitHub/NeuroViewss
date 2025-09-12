@@ -13,6 +13,7 @@ import SwiftUI
 import Combine
 
 // MARK: - Performance Benchmarks
+@MainActor
 public struct PerformanceBenchmarks {
     public static let appStartupTime: TimeInterval = 2.0      // App startup target
     public static let cameraStartupTime: TimeInterval = 1.0   // Camera startup target

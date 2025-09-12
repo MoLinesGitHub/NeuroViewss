@@ -23,10 +23,12 @@ public final class StabilityAnalyzer: AIAnalyzer {
     private let ciContext = CIContext()
     private var settings: StabilitySettings = .default
     
-    // Motion tracking
+    // Motion tracking (iOS/watchOS only)
+    #if !os(macOS)
     private let motionManager = CMMotionManager()
     private var motionQueue = OperationQueue()
     private var recentMotionData: [CMDeviceMotion] = []
+    #endif
     private let motionHistoryLimit = 10
     
     // Frame comparison for optical stability
