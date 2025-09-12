@@ -262,6 +262,31 @@ struct CameraInterfaceView: View {
             // AI Suggestions Overlay
             AISuggestionsView(suggestions: cameraManager.aiSuggestions)
             
+            // Smart Features Overlay
+            VStack {
+                HStack {
+                    Spacer()
+                    
+                    if cameraManager.isSmartFeaturesEnabled {
+                        SmartExposureView(captureDevice: .constant(cameraManager.getCurrentDevice()))
+                            .frame(width: 320)
+                    }
+                }
+                .padding(.top, 60)
+                
+                Spacer()
+            }
+            
+            // Composition Guides Overlay
+            if cameraManager.isSmartFeaturesEnabled {
+                SmartCompositionGuidesView()
+            }
+            
+            // Auto-Focus Overlay
+            if cameraManager.isSmartFeaturesEnabled {
+                SmartAutoFocusView(captureDevice: .constant(cameraManager.getCurrentDevice()))
+            }
+            
             // Camera Controls Overlay
             VStack {
                 // Top Controls
@@ -282,6 +307,15 @@ struct CameraInterfaceView: View {
                             Image(systemName: cameraManager.isAIAnalysisEnabled ? "brain.head.profile.fill" : "brain.head.profile")
                                 .font(.title2)
                                 .foregroundColor(cameraManager.isAIAnalysisEnabled ? .blue : .white)
+                        }
+                        
+                        // Smart Features Toggle
+                        Button(action: { 
+                            cameraManager.isSmartFeaturesEnabled.toggle()
+                        }) {
+                            Image(systemName: cameraManager.isSmartFeaturesEnabled ? "wand.and.stars" : "wand.and.stars.inverse")
+                                .font(.title2)
+                                .foregroundColor(cameraManager.isSmartFeaturesEnabled ? .yellow : .white)
                         }
                         
                         // Camera Switch

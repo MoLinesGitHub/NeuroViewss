@@ -15,6 +15,21 @@ import Combine
 import UIKit
 #endif
 
+// MARK: - Camera Errors
+enum CameraError: LocalizedError {
+    case deviceNotAvailable
+    case configurationFailed
+    
+    var errorDescription: String? {
+        switch self {
+        case .deviceNotAvailable:
+            return "Dispositivo de cámara no disponible"
+        case .configurationFailed:
+            return "Error en la configuración de la cámara"
+        }
+    }
+}
+
 @MainActor
 final class CameraManager: NSObject, ObservableObject {
     
@@ -33,6 +48,12 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var currentAnalysis: AIAnalysisResult?
     @Published var aiSuggestions: [AISuggestion] = []
     @Published var isAIAnalysisEnabled = true
+    
+    // Smart Features
+    @Published var smartExposureAssistant = SmartExposureAssistant()
+    @Published var currentExposureSuggestion: ExposureSuggestion?
+    @Published var smartAutoFocus = SmartAutoFocus()
+    @Published var isSmartFeaturesEnabled = true
     
     // MARK: - Camera Session Components
     nonisolated private let captureSession = AVCaptureSession()
@@ -488,6 +509,11 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             // Process the frame
             self.processFrameForAI(sampleBuffer)
+            
+            // Process smart features if enabled
+            if self.isSmartFeaturesEnabled {
+                self.processFrameForSmartFeatures(sampleBuffer)
+            }
         }
     }
     
@@ -504,5 +530,36 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
                 self?.aiSuggestions = result.suggestions
             }
         }
+    }
+    
+    @MainActor
+    private func processFrameForSmartFeatures(_ sampleBuffer: CMSampleBuffer) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        
+        // Process with Smart Exposure Assistant
+        smartExposureAssistant.analyzeFrame(pixelBuffer)
+        
+        // Process with Smart Auto Focus
+        smartAutoFocus.analyzeForFocus(pixelBuffer)
+        
+        // Update current exposure suggestion
+        currentExposureSuggestion = smartExposureAssistant.currentSuggestion
+    }
+    
+    // MARK: - Smart Features Methods
+    
+    /// Get current capture device for smart features
+    func getCurrentDevice() -> AVCaptureDevice? {
+        return videoDeviceInput?.device
+    }
+    
+    /// Apply smart exposure suggestion
+    func applySmartExposureSuggestion(_ suggestion: ExposureSuggestion) throws {
+        guard let device = getCurrentDevice() else {
+            throw CameraError.deviceNotAvailable
+        }
+        try smartExposureAssistant.applySuggestion(suggestion, to: device)
     }
 }

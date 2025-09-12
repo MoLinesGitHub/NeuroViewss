@@ -45,7 +45,7 @@ public final class ExposureAnalyzer: AIAnalyzer {
     }
     
     // MARK: - Analysis
-    public func analyze(frame: CVPixelBuffer) -> AIAnalysis? {
+    nonisolated public func analyze(frame: CVPixelBuffer) -> AIAnalysis? {
         guard isEnabled else { return nil }
         
         let ciImage = CIImage(cvPixelBuffer: frame)
