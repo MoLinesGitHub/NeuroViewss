@@ -34,6 +34,12 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Performance/AdaptivePriorityScheduler.swift.disabled,
+				Performance/ConcurrencyOptimizer.swift.disabled,
+				Performance/IntelligentCacheSystem.swift.disabled,
+				Performance/SIMDFrameProcessor.swift.disabled,
+				Performance/UltraPerformanceOptimizer.swift.disabled,
+				Performance/WorkloadPredictor.swift.disabled,
 			);
 			target = 996DBEDC2E7338090079478F /* NeuroViews 2.0 */;
 		};

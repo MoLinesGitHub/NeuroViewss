@@ -33,51 +33,56 @@ public actor BatteryOptimizer: ObservableObject {
     private let logger = Logger(subsystem: "com.neuroviews.performance", category: "battery")
     
     // Battery monitoring
-    private var batteryMonitorTimer: Timer?
+    private var batteryMonitorTask: Task<Void, Never>?
     private var batteryHistory: [BatteryReading] = []
     private let historyLimit = 60 // Last 60 readings
     
     // Thermal monitoring
-    private var thermalMonitorTimer: Timer?
+    private var thermalMonitorTask: Task<Void, Never>?
     private var thermalHistory: [ThermalReading] = []
     
     // Performance throttling
     private var currentThrottleLevel: ThrottleLevel = .none
-    private var adaptiveQualitySettings: AdaptiveQualitySettings = .default
+    private var adaptiveQualitySettings: AdaptiveQualitySettings = AdaptiveQualitySettings(
+        frameRate: 30.0,
+        analysisInterval: 0.033,
+        qualityLevel: .high
+    )
     
     // Power usage tracking
     private var powerConsumptionRate: Double = 0.0 // %/hour
     private var baselineConsumption: Double = 0.0
     private var aiAnalysisConsumption: Double = 0.0
     
-    nonisolated private init() {
+    private init() {
         // Setup será manejado en startOptimization()
     }
     
     // MARK: - Public Methods
     
     /// Start battery optimization
-    @MainActor
     public func startOptimization() async {
-        guard !isOptimizing else { return }
+        guard await MainActor.run(resultType: Bool.self, body: { !isOptimizing }) else { return }
         
-        isOptimizing = true
+        await MainActor.run { isOptimizing = true }
         logger.info("🔋 Starting battery optimization")
         
         await updateBatteryStatus()
         await updateThermalStatus()
         await calculatePowerMode()
         
-        // Start monitoring timers
-        batteryMonitorTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            Task { [weak self] in
+        // Start monitoring tasks
+        batteryMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
                 await self?.monitorBattery()
+                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
             }
         }
         
-        thermalMonitorTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
-            Task { [weak self] in
+        thermalMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
                 await self?.monitorThermalState()
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
             }
         }
         
@@ -88,15 +93,14 @@ public actor BatteryOptimizer: ObservableObject {
     }
     
     /// Stop battery optimization
-    @MainActor
     public func stopOptimization() async {
-        guard isOptimizing else { return }
+        guard await MainActor.run(resultType: Bool.self, body: { isOptimizing }) else { return }
         
-        isOptimizing = false
-        batteryMonitorTimer?.invalidate()
-        thermalMonitorTimer?.invalidate()
-        batteryMonitorTimer = nil
-        thermalMonitorTimer = nil
+        await MainActor.run { isOptimizing = false }
+        batteryMonitorTask?.cancel()
+        thermalMonitorTask?.cancel()
+        batteryMonitorTask = nil
+        thermalMonitorTask = nil
         
         logger.info("⏹️ Battery optimization stopped")
     }
@@ -171,7 +175,7 @@ public actor BatteryOptimizer: ObservableObject {
         
         await updateThrottleLevel(appliedSettings.throttleLevel)
         
-        logger.info("⚡ Applied throttling: \(appliedSettings.throttleLevel) - estimated savings: \(String(format: "%.1f", appliedSettings.energySavings))%")
+        logger.info("⚡ Applied throttling: \(String(describing: appliedSettings.throttleLevel)) - estimated savings: \(String(format: "%.1f", appliedSettings.energySavings))%")
         
         return appliedSettings
     }
@@ -210,15 +214,19 @@ public actor BatteryOptimizer: ObservableObject {
         let consumptionAnalysis = await analyzePowerConsumption()
         let thermalAnalysis = await analyzeThermalPerformance()
         let recommendations = await getOptimizationRecommendations()
+        let estimatedTime = await estimateRemainingBatteryTime()
+        
+        let currentThermalState = await MainActor.run { thermalState }
+        let currentPowerMode = await MainActor.run { powerMode }
         
         return BatteryOptimizationReport(
             timestamp: Date(),
             batteryLevel: currentReading.level,
             batteryState: currentReading.state,
-            thermalState: thermalState,
-            powerMode: powerMode,
+            thermalState: currentThermalState,
+            powerMode: currentPowerMode,
             consumptionRate: consumptionAnalysis.currentRate,
-            estimatedTimeRemaining: await estimateRemainingBatteryTime(),
+            estimatedTimeRemaining: estimatedTime,
             thermalAnalysis: thermalAnalysis,
             recommendations: recommendations
         )
@@ -226,9 +234,11 @@ public actor BatteryOptimizer: ObservableObject {
     
     // MARK: - Private Implementation
     
-    private func setupBatteryMonitoring() {
+    private func setupBatteryMonitoring() async {
         #if os(iOS)
-        UIDevice.current.isBatteryMonitoringEnabled = true
+        await MainActor.run {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+        }
         #endif
     }
     
@@ -259,7 +269,7 @@ public actor BatteryOptimizer: ObservableObject {
         }
         
         NotificationCenter.default.addObserver(
-            forName: NSProcessInfoThermalStateDidChangeNotification,
+            forName: ProcessInfo.thermalStateDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -285,8 +295,9 @@ public actor BatteryOptimizer: ObservableObject {
     
     private func updateBatteryStatus() async {
         #if os(iOS)
-        let level = Double(UIDevice.current.batteryLevel)
-        let state = mapBatteryState(UIDevice.current.batteryState)
+        let level = await MainActor.run { Double(UIDevice.current.batteryLevel) }
+        let rawState = await MainActor.run { UIDevice.current.batteryState }
+        let state = mapBatteryState(rawState)
         
         await MainActor.run {
             self.batteryLevel = level >= 0 ? level : 1.0 // -1.0 means unknown
@@ -342,9 +353,10 @@ public actor BatteryOptimizer: ObservableObject {
     }
     
     private func recordThermalReading() async {
+        let currentThermalState = await MainActor.run { thermalState }
         let reading = ThermalReading(
             timestamp: Date(),
-            state: thermalState
+            state: currentThermalState
         )
         
         thermalHistory.append(reading)
@@ -388,12 +400,12 @@ public actor BatteryOptimizer: ObservableObject {
             await MainActor.run {
                 self.powerMode = newMode
             }
-            logger.info("🔋 Power mode changed to: \(newMode)")
+            logger.info("🔋 Power mode changed to: \(String(describing: newMode))")
         }
     }
     
     private func adjustForThermalState() async {
-        let thermal = thermalState
+        let thermal = await MainActor.run { thermalState }
         
         switch thermal {
         case .critical:
@@ -478,14 +490,15 @@ public actor BatteryOptimizer: ObservableObject {
     private func analyzeThermalPerformance() async -> ThermalAnalysis {
         let recentThermal = Array(thermalHistory.suffix(10))
         
-        let averageState = recentThermal.isEmpty ? .nominal : 
+        let averageStateValue = recentThermal.isEmpty ? ThermalState.nominal.rawValue : 
             recentThermal.map { $0.state.rawValue }.reduce(0, +) / recentThermal.count
         
+        let currentThermal = await MainActor.run { thermalState }
         return ThermalAnalysis(
-            currentState: thermalState,
-            averageRecentState: ThermalState(rawValue: averageState) ?? .nominal,
+            currentState: currentThermal,
+            averageRecentState: ThermalState(rawValue: averageStateValue) ?? .nominal,
             timeInCritical: calculateTimeInState(.critical),
-            recommendations: generateThermalRecommendations()
+            recommendations: await generateThermalRecommendations()
         )
     }
     
@@ -497,10 +510,11 @@ public actor BatteryOptimizer: ObservableObject {
         return TimeInterval(criticalReadings.count) * 10.0 // 10 seconds per reading
     }
     
-    private func generateThermalRecommendations() -> [String] {
+    private func generateThermalRecommendations() async -> [String] {
         var recommendations: [String] = []
+        let currentThermal = await MainActor.run { thermalState }
         
-        switch thermalState {
+        switch currentThermal {
         case .critical:
             recommendations.append("Reducir inmediatamente la calidad de análisis AI")
             recommendations.append("Limitar frame rate a 10 FPS")
@@ -525,6 +539,7 @@ public actor BatteryOptimizer: ObservableObject {
         
         let level = await getCurrentBatteryLevel()
         let consumptionRate = powerConsumptionRate
+        let currentThermal = await MainActor.run { thermalState }
         
         if level < 0.2 {
             recommendations.append("Activar modo ahorro de energía inmediatamente")
@@ -536,7 +551,7 @@ public actor BatteryOptimizer: ObservableObject {
             recommendations.append("Considerar reducir frecuencia de análisis")
         }
         
-        if thermalState == .serious || thermalState == .critical {
+        if currentThermal == .serious || currentThermal == .critical {
             recommendations.append("Estado térmico elevado - reducir carga del procesador")
         }
         
@@ -589,7 +604,7 @@ public actor BatteryOptimizer: ObservableObject {
     }
     
     #if os(iOS)
-    private func mapBatteryState(_ uiState: UIDevice.BatteryState) -> BatteryState {
+    nonisolated private func mapBatteryState(_ uiState: UIDevice.BatteryState) -> BatteryState {
         switch uiState {
         case .unknown: return .unknown
         case .unplugged: return .unplugged

@@ -10,6 +10,7 @@ import Foundation
 import Combine
 import AVFoundation
 import os.log
+import SwiftUI
 
 // MARK: - Lazy AI Component Loader
 @available(iOS 15.0, macOS 12.0, *)
@@ -33,7 +34,7 @@ public actor LazyAILoader: ObservableObject {
     private var componentUsage: [AIComponent: ComponentUsage] = [:]
     private var loadTimes: [AIComponent: TimeInterval] = [:]
     
-    nonisolated private init() {
+    private init() {
         // Setup será manejado cuando se necesite
     }
     
@@ -44,8 +45,9 @@ public actor LazyAILoader: ObservableObject {
         logger.info("📦 Loading AI component: \(component.rawValue)")
         
         await MainActor.run {
-            self.isLoadingComponent = true
-            self.loadingProgress = 0.0
+            loadedComponents.insert(component)
+            isLoadingComponent = true
+            loadingProgress = 0.0
         }
         
         let startTime = CACurrentMediaTime()
@@ -135,15 +137,16 @@ public actor LazyAILoader: ObservableObject {
         
         componentInstances.removeValue(forKey: component)
         
-        await MainActor.run {
-            self.loadedComponents.remove(component)
+        _ = await MainActor.run {
+            loadedComponents.remove(component)
         }
     }
     
     /// Get loading statistics
-    public func getLoadingStatistics() -> LoadingStatistics {
+    public func getLoadingStatistics() async -> LoadingStatistics {
+        let components = await MainActor.run { loadedComponents }
         return LoadingStatistics(
-            loadedComponents: loadedComponents,
+            loadedComponents: components,
             componentUsage: componentUsage,
             loadTimes: loadTimes,
             totalMemoryMB: 0.0 // Simplified for Swift 6
@@ -168,67 +171,29 @@ public actor LazyAILoader: ObservableObject {
         
         switch component {
         case .exposureAnalyzer:
-            await updateLoadingProgress(0.3)
-            let analyzer = ExposureAnalyzer()
-            await updateLoadingProgress(0.7)
-            return analyzer as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .stabilityAnalyzer:
-            await updateLoadingProgress(0.3)
-            let analyzer = StabilityAnalyzer()
-            await updateLoadingProgress(0.7)
-            return analyzer as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .subjectDetector:
-            await updateLoadingProgress(0.2)
-            let detector = AdvancedSubjectDetector()
-            await updateLoadingProgress(0.5)
-            await detector.warmUp() // Pre-load Vision models
-            await updateLoadingProgress(0.8)
-            return detector as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .focusAnalyzer:
-            await updateLoadingProgress(0.3)
-            let analyzer = FocusAnalyzer()
-            await updateLoadingProgress(0.7)
-            return analyzer as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .contextualEngine:
-            await updateLoadingProgress(0.2)
-            let engine = await ContextualRecommendationEngine()
-            await updateLoadingProgress(0.4)
-            await engine.loadModels() // Heavy model loading
-            await updateLoadingProgress(0.8)
-            return engine as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .smartExposureAssistant:
-            await updateLoadingProgress(0.2)
-            // Load dependencies first
-            let exposureAnalyzer = try await loadComponent(.exposureAnalyzer, type: ExposureAnalyzer.self)
-            await updateLoadingProgress(0.5)
-            let assistant = await SmartExposureAssistant()
-            await updateLoadingProgress(0.8)
-            return assistant as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .smartCompositionGuides:
-            await updateLoadingProgress(0.2)
-            let subjectDetector = try await loadComponent(.subjectDetector, type: AdvancedSubjectDetector.self)
-            await updateLoadingProgress(0.5)
-            let guides = await SmartCompositionGuides()
-            await updateLoadingProgress(0.8)
-            return guides as! T
+            throw LazyAILoaderError.componentUnavailable(component)
             
         case .smartAutoFocus:
-            await updateLoadingProgress(0.2)
-            let focusAnalyzer = try await loadComponent(.focusAnalyzer, type: FocusAnalyzer.self)
-            let subjectDetector = try await loadComponent(.subjectDetector, type: AdvancedSubjectDetector.self)
-            await updateLoadingProgress(0.6)
-            let autoFocus = await SmartAutoFocus()
-            await updateLoadingProgress(0.8)
-            return autoFocus as! T
+            throw LazyAILoaderError.componentUnavailable(component)
         }
-        
-        await updateLoadingProgress(1.0)
     }
     
     private func preloadComponentAsync(_ component: AIComponent) async {
@@ -237,25 +202,12 @@ public actor LazyAILoader: ObservableObject {
         Task.detached { [weak self] in
             do {
                 switch component {
-                case .exposureAnalyzer:
-                    _ = try await self?.loadComponent(component, type: ExposureAnalyzer.self)
-                case .stabilityAnalyzer:
-                    _ = try await self?.loadComponent(component, type: StabilityAnalyzer.self)
-                case .subjectDetector:
-                    _ = try await self?.loadComponent(component, type: AdvancedSubjectDetector.self)
-                case .focusAnalyzer:
-                    _ = try await self?.loadComponent(component, type: FocusAnalyzer.self)
-                case .contextualEngine:
-                    _ = try await self?.loadComponent(component, type: ContextualRecommendationEngine.self)
-                case .smartExposureAssistant:
-                    _ = try await self?.loadComponent(component, type: SmartExposureAssistant.self)
-                case .smartCompositionGuides:
-                    _ = try await self?.loadComponent(component, type: SmartCompositionGuides.self)
-                case .smartAutoFocus:
-                    _ = try await self?.loadComponent(component, type: SmartAutoFocus.self)
+                case .exposureAnalyzer, .stabilityAnalyzer, .subjectDetector, .focusAnalyzer, .contextualEngine, .smartExposureAssistant, .smartCompositionGuides, .smartAutoFocus:
+                    // Skip preloading for unavailable components
+                    return
                 }
             } catch {
-                await self?.logger.error("Failed to preload \(component.rawValue): \(error)")
+                self?.logger.error("Failed to preload \(component.rawValue): \(error)")
             }
         }
     }
@@ -351,6 +303,19 @@ public struct LoadingStatistics {
     public let totalMemoryMB: Double
 }
 
+// MARK: - Loader Errors
+
+enum LazyAILoaderError: Error, LocalizedError {
+    case componentUnavailable(AIComponent)
+    
+    var errorDescription: String? {
+        switch self {
+        case .componentUnavailable(let component):
+            return "Component \(component.rawValue) is unavailable for lazy loading in this target."
+        }
+    }
+}
+
 // MARK: - Cleanup Protocol
 
 public protocol AIComponentCleanup {
@@ -359,75 +324,67 @@ public protocol AIComponentCleanup {
 
 // MARK: - Extensions for AI Components
 
-extension ExposureAnalyzer: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup exposure analyzer resources
-        // Clear any cached histograms, analysis data, etc.
-    }
-}
+// The following extensions are commented out as the referenced types are not available in this target
 
-extension StabilityAnalyzer: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup stability analyzer resources
-        // Clear motion data buffers, etc.
-    }
-}
+// extension ExposureAnalyzer: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup exposure analyzer resources
+//         // Clear any cached histograms, analysis data, etc.
+//     }
+// }
 
-extension AdvancedSubjectDetector: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup Vision framework resources
-        // Clear cached detection results, etc.
-    }
-    
-    public func warmUp() async {
-        // Pre-initialize Vision models for faster first detection
-        // This would trigger model loading without performing actual detection
-    }
-}
+// extension StabilityAnalyzer: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup stability analyzer resources
+//         // Clear motion data buffers, etc.
+//     }
+// }
 
-extension FocusAnalyzer: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup focus analysis resources
-    }
-}
+// extension AdvancedSubjectDetector: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup Vision framework resources
+//         // Clear cached detection results, etc.
+//     }
+//     
+//     public func warmUp() async {
+//         // Pre-initialize Vision models for faster first detection
+//         // This would trigger model loading without performing actual detection
+//     }
+// }
 
-extension ContextualRecommendationEngine: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup recommendation engine resources
-        // Clear cached recommendations, model weights, etc.
-    }
-    
-    public func loadModels() async {
-        // Pre-load heavy AI models for contextual recommendations
-    }
-}
+// extension FocusAnalyzer: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup focus analysis resources
+//     }
+// }
 
-@available(iOS 15.0, macOS 12.0, *)
-extension SmartExposureAssistant: AIComponentCleanup {
-    @MainActor
-    public func cleanup() async {
-        // Cleanup exposure assistant resources
-        self.exposureHistory.removeAll()
-        self.currentSuggestion = nil
-    }
-}
+// extension ContextualRecommendationEngine: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup recommendation engine resources
+//         // Clear cached recommendations, model weights, etc.
+//     }
+//     
+//     public func loadModels() async {
+//         // Pre-load heavy AI models for contextual recommendations
+//     }
+// }
 
-@available(iOS 15.0, macOS 12.0, *)
-extension SmartCompositionGuides: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup composition guides resources
-        await MainActor.run {
-            self.currentGuides.removeAll()
-        }
-    }
-}
+// @available(iOS 15.0, macOS 12.0, *)
+// extension SmartCompositionGuides: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup composition guides resources
+//         await MainActor.run {
+//             self.currentGuides.removeAll()
+//         }
+//     }
+// }
 
-@available(iOS 15.0, macOS 12.0, *)
-extension SmartAutoFocus: AIComponentCleanup {
-    public func cleanup() async {
-        // Cleanup auto focus resources
-        await MainActor.run {
-            self.trackingSubjects.removeAll()
-        }
-    }
-}
+// @available(iOS 15.0, macOS 12.0, *)
+// extension SmartAutoFocus: AIComponentCleanup {
+//     public func cleanup() async {
+//         // Cleanup auto focus resources
+//         await MainActor.run {
+//             self.trackingSubjects.removeAll()
+//         }
+//     }
+// }

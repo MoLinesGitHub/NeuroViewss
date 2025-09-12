@@ -70,7 +70,7 @@ public actor PerformanceBenchmark {
         
         let suiteResult = BenchmarkSuiteResult(
             results: results,
-            overallScore: calculateOverallScore(results),
+            overallScore: await calculateOverallScore(results),
             timestamp: Date()
         )
         

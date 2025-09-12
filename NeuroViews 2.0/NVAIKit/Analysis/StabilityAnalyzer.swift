@@ -42,10 +42,13 @@ public final class StabilityAnalyzer: AIAnalyzer {
     }
     
     deinit {
+        #if !os(macOS)
         motionManager.stopDeviceMotionUpdates()
+        #endif
     }
     
     private func setupMotionTracking() {
+        #if !os(macOS)
         guard motionManager.isDeviceMotionAvailable else {
             print("⚠️ Device motion not available for stability analysis")
             return
@@ -59,6 +62,9 @@ public final class StabilityAnalyzer: AIAnalyzer {
                 self.processMotionData(motion)
             }
         }
+        #else
+        print("📱 Motion tracking not available on macOS - using optical-only stability analysis")
+        #endif
     }
     
     // MARK: - Configuration
@@ -87,6 +93,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
         var analysisCount = 0
         
         // Motion-based stability analysis
+        #if !os(macOS)
         if settings.motionTrackingEnabled {
             let motionResult = analyzeMotionStability()
             analysisData["motionStability"] = motionResult.toDictionary()
@@ -95,6 +102,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
             
             suggestions.append(contentsOf: generateMotionSuggestions(from: motionResult))
         }
+        #endif
         
         // Optical stability analysis
         if settings.opticalStabilityEnabled {
@@ -131,6 +139,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
     
     // MARK: - Motion Analysis
     
+    #if !os(macOS)
     private func processMotionData(_ motion: CMDeviceMotion) {
         recentMotionData.append(motion)
         if recentMotionData.count > motionHistoryLimit {
@@ -184,6 +193,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
             confidence: confidence
         )
     }
+    #endif
     
     private func calculateVariance(_ values: [Double]) -> Double {
         guard values.count > 1 else { return 0 }
@@ -343,6 +353,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
     
     // MARK: - Suggestion Generation
     
+    #if !os(macOS)
     private func generateMotionSuggestions(from result: MotionStabilityResult) -> [AISuggestion] {
         var suggestions: [AISuggestion] = []
         
@@ -379,6 +390,7 @@ public final class StabilityAnalyzer: AIAnalyzer {
         
         return suggestions
     }
+    #endif
     
     private func generateOpticalSuggestions(from result: OpticalStabilityResult) -> [AISuggestion] {
         var suggestions: [AISuggestion] = []

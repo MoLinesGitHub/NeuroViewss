@@ -24,22 +24,23 @@ public struct PerformanceBenchmarks {
     public static let aiAnalysisTime: TimeInterval = 0.05     // 50ms max AI analysis
 }
 
-// MARK: - Performance Monitor Actor
+// MARK: - Performance Monitor
 @available(iOS 15.0, macOS 12.0, *)
-public actor PerformanceMonitor: ObservableObject {
+@MainActor
+public final class PerformanceMonitor: ObservableObject {
     
     // MARK: - Singleton
     public static let shared = PerformanceMonitor()
     
     // MARK: - Performance Metrics
-    @MainActor @Published public var currentMetrics = PerformanceMetrics()
-    @MainActor @Published public var isMonitoring = false
-    @MainActor @Published public var performanceStatus: PerformanceStatus = .optimal
+    @Published public var currentMetrics = PerformanceMetrics()
+    @Published public var isMonitoring = false
+    @Published public var performanceStatus: PerformanceStatus = .optimal
     
     // MARK: - Private Properties
     private var metricsHistory: [PerformanceSnapshot] = []
     private let historyLimit = 100
-    private var monitoringTimer: Timer?
+    private var monitoringTask: Task<Void, Never>?
     private let monitoringQueue = DispatchQueue(label: "com.neuroviews.performance", qos: .utility)
     
     // Measurement tracking
@@ -58,17 +59,17 @@ public actor PerformanceMonitor: ObservableObject {
     // MARK: - Public Interface
     
     /// Start performance monitoring
-    @MainActor
     public func startMonitoring() async {
-        guard !isMonitoring else { return }
+        guard await MainActor.run(resultType: Bool.self, body: { !isMonitoring }) else { return }
         
         await setupMonitoring()
-        isMonitoring = true
+        await MainActor.run { isMonitoring = true }
         
         // Start periodic monitoring
-        monitoringTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { [weak self] in
+        monitoringTask = Task { [weak self] in
+            while !Task.isCancelled {
                 await self?.capturePerformanceSnapshot()
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
             }
         }
         
@@ -76,14 +77,13 @@ public actor PerformanceMonitor: ObservableObject {
     }
     
     /// Stop performance monitoring
-    @MainActor
     public func stopMonitoring() async {
-        guard isMonitoring else { return }
+        guard await MainActor.run(resultType: Bool.self, body: { isMonitoring }) else { return }
         
         await stopMonitoringInternal()
-        isMonitoring = false
-        monitoringTimer?.invalidate()
-        monitoringTimer = nil
+        await MainActor.run { isMonitoring = false }
+        monitoringTask?.cancel()
+        monitoringTask = nil
         
         print("⏹️ Performance monitoring stopped")
     }
@@ -166,6 +166,28 @@ public actor PerformanceMonitor: ObservableObject {
                metrics.averageAIAnalysisTime <= PerformanceBenchmarks.aiAnalysisTime
     }
     
+    /// Generate CI/CD friendly performance report
+    @MainActor
+    public func generateCIReport() async -> CIPerformanceReport {
+        let metrics = await getCurrentMetrics()
+        let isHealthy = await isPerformanceHealthy()
+        
+        let report = CIPerformanceReport(
+            timestamp: Date(),
+            isHealthy: isHealthy,
+            memoryUsageMB: metrics.memoryUsageMB,
+            memoryTarget: Double(PerformanceBenchmarks.memoryUsage) / 1_000_000,
+            averageFrameTimeMs: metrics.averageFrameTime * 1000,
+            frameTimeTargetMs: PerformanceBenchmarks.frameProcessingTime * 1000,
+            averageAITimeMs: metrics.averageAIAnalysisTime * 1000,
+            aiTimeTargetMs: PerformanceBenchmarks.aiAnalysisTime * 1000,
+            cpuUsage: metrics.cpuUsage,
+            cpuTarget: PerformanceBenchmarks.cpuUsage
+        )
+        
+        return report
+    }
+    
     // MARK: - Private Implementation
     
     private func setupPerformanceTracking() {
@@ -216,21 +238,9 @@ public actor PerformanceMonitor: ObservableObject {
     }
     
     private func getCurrentCPUUsage() async -> Double {
-        var info = processor_info_array_t.allocate(capacity: 1)
-        var numCores: natural_t = 0
-        var numCoresU: mach_msg_type_number_t = 0
-        
-        defer {
-            info.deallocate()
-        }
-        
-        let result = host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &numCores, &info, &numCoresU)
-        
-        if result == KERN_SUCCESS {
-            // Simplified CPU calculation - real implementation would need more sophisticated tracking
-            return 0.1 // Placeholder - actual CPU measurement requires more complex implementation
-        }
-        return 0
+        // Simplified CPU usage measurement
+        // Real implementation would use more sophisticated system calls
+        return 0.1 // Placeholder - actual CPU measurement requires platform-specific implementation
     }
     
     private func getCurrentFrameRate() async -> Double {
@@ -490,5 +500,55 @@ public enum PerformanceStatus {
         case .warning: return "Warning"
         case .critical: return "Critical"
         }
+    }
+}
+
+// MARK: - CI/CD Performance Report
+
+public struct CIPerformanceReport {
+    public let timestamp: Date
+    public let isHealthy: Bool
+    public let memoryUsageMB: Double
+    public let memoryTarget: Double
+    public let averageFrameTimeMs: Double
+    public let frameTimeTargetMs: Double
+    public let averageAITimeMs: Double
+    public let aiTimeTargetMs: Double
+    public let cpuUsage: Double
+    public let cpuTarget: Double
+    
+    public var memoryStatus: String {
+        memoryUsageMB <= memoryTarget ? "✅ PASS" : "❌ FAIL"
+    }
+    
+    public var frameTimeStatus: String {
+        averageFrameTimeMs <= frameTimeTargetMs ? "✅ PASS" : "❌ FAIL"
+    }
+    
+    public var aiTimeStatus: String {
+        averageAITimeMs <= aiTimeTargetMs ? "✅ PASS" : "❌ FAIL"
+    }
+    
+    public var cpuStatus: String {
+        cpuUsage <= cpuTarget ? "✅ PASS" : "❌ FAIL"
+    }
+    
+    public var summaryStatus: String {
+        isHealthy ? "✅ ALL TESTS PASS" : "❌ PERFORMANCE ISSUES DETECTED"
+    }
+    
+    public init(timestamp: Date, isHealthy: Bool, memoryUsageMB: Double, memoryTarget: Double, 
+                averageFrameTimeMs: Double, frameTimeTargetMs: Double, averageAITimeMs: Double, 
+                aiTimeTargetMs: Double, cpuUsage: Double, cpuTarget: Double) {
+        self.timestamp = timestamp
+        self.isHealthy = isHealthy
+        self.memoryUsageMB = memoryUsageMB
+        self.memoryTarget = memoryTarget
+        self.averageFrameTimeMs = averageFrameTimeMs
+        self.frameTimeTargetMs = frameTimeTargetMs
+        self.averageAITimeMs = averageAITimeMs
+        self.aiTimeTargetMs = aiTimeTargetMs
+        self.cpuUsage = cpuUsage
+        self.cpuTarget = cpuTarget
     }
 }

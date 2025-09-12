@@ -125,7 +125,12 @@ public final class UnifiedPerformanceSystem: ObservableObject {
         maxConcurrency: Int? = nil
     ) async throws -> [T] {
         
-        let optimalConcurrency = maxConcurrency ?? await calculateOptimalConcurrency()
+        let optimalConcurrency: Int
+        if let maxConcurrency = maxConcurrency {
+            optimalConcurrency = maxConcurrency
+        } else {
+            optimalConcurrency = await calculateOptimalConcurrency()
+        }
         
         logger.debug("📦 Executing \(tasks.count) tasks with concurrency \(optimalConcurrency)")
         
@@ -305,19 +310,28 @@ public final class UnifiedPerformanceSystem: ObservableObject {
         let processingDelay: UInt64 = switch type {
         case .exposure: 50_000_000 // 50ms
         case .focus: 100_000_000 // 100ms
-        case .objectDetection: 200_000_000 // 200ms
-        case .sceneClassification: 300_000_000 // 300ms
-        case .colorAnalysis: 75_000_000 // 75ms
-        case .faceDetection: 150_000_000 // 150ms
-        case .motionAnalysis: 120_000_000 // 120ms
+        case .subject: 200_000_000 // 200ms
+        case .composition: 300_000_000 // 300ms
+        case .lighting: 150_000_000 // 150ms
+        case .stability: 120_000_000 // 120ms
         }
         
         try await Task.sleep(nanoseconds: processingDelay)
         
         let processingTime = CACurrentMediaTime() - startTime
         
+        // Convert AIAnalysisType to PerformanceAIAnalysisType
+        let performanceType: PerformanceAIAnalysisType = switch type {
+        case .exposure: .exposure
+        case .focus: .focus
+        case .subject: .objectDetection
+        case .composition: .sceneClassification
+        case .lighting: .colorAnalysis
+        case .stability: .motionAnalysis
+        }
+        
         return PerformanceAIAnalysisResult(
-            type: type,
+            type: performanceType,
             confidence: 0.85 + Double.random(in: 0...0.15),
             processingTime: processingTime,
             data: generateAnalysisData(for: type),
@@ -341,7 +355,7 @@ public final class UnifiedPerformanceSystem: ObservableObject {
     }
     
     private func updateExecutionMetrics(duration: TimeInterval, strategy: UnifiedExecutionStrategy) async {
-        logger.debug("⚡ Task executed in \(String(format: "%.2f", duration))s using \(strategy)")
+        logger.debug("⚡ Task executed in \(String(format: "%.2f", duration))s using \(String(describing: strategy))")
     }
     
     private func adaptToCurrentConditions() async {
@@ -401,16 +415,14 @@ public final class UnifiedPerformanceSystem: ObservableObject {
             return ["brightness": 0.7, "contrast": 0.6, "histogram_peak": 128.0]
         case .focus:
             return ["sharpness": 0.85, "edge_density": 0.75, "blur_amount": 0.1]
-        case .objectDetection:
+        case .subject:
             return ["objects_count": 3.0, "confidence_avg": 0.82, "processing_complexity": 0.65]
-        case .sceneClassification:
+        case .composition:
             return ["scene_confidence": 0.91, "category_score": 0.78, "complexity": 0.55]
-        case .colorAnalysis:
+        case .lighting:
             return ["dominant_hue": 210.0, "saturation": 0.65, "brightness": 0.72]
-        case .faceDetection:
-            return ["faces_count": 1.0, "face_confidence": 0.95, "emotion_score": 0.68]
-        case .motionAnalysis:
-            return ["motion_magnitude": 0.45, "motion_direction": 135.0, "stability": 0.78]
+        case .stability:
+            return ["stability_score": 0.78, "motion_magnitude": 0.45, "motion_direction": 135.0]
         }
     }
     
@@ -420,16 +432,14 @@ public final class UnifiedPerformanceSystem: ObservableObject {
             return ["Increase exposure by +0.3 EV", "Consider using HDR mode"]
         case .focus:
             return ["Subject is in focus", "Consider using portrait mode"]
-        case .objectDetection:
+        case .subject:
             return ["3 objects detected", "Consider wider framing"]
-        case .sceneClassification:
+        case .composition:
             return ["Landscape scene detected", "Use landscape orientation"]
-        case .colorAnalysis:
+        case .lighting:
             return ["Cool color temperature", "Consider warming filter"]
-        case .faceDetection:
-            return ["Face detected", "Enable face tracking"]
-        case .motionAnalysis:
-            return ["Moderate motion detected", "Use faster shutter speed"]
+        case .stability:
+            return ["Good stability", "Motion compensated"]
         }
     }
 }

@@ -43,7 +43,7 @@ public actor MemoryOptimizer: ObservableObject {
     private var pixelBufferPool: CVPixelBufferPool?
     private var poolAttributes: [String: Any] = [:]
     
-    nonisolated private init() {
+    private init() {
         // Setup será manejado en startOptimization()
     }
     

@@ -11,12 +11,8 @@ import CoreImage
 import AVFoundation
 import os.log
 
-// MARK: - Analysis Priority
-public enum AnalysisPriority: Int, CaseIterable {
-    case low = 0
-    case normal = 1
-    case high = 2
-}
+// Import performance types to avoid conflicts
+public typealias AnalysisPriority = TaskPriorityLevel
 
 @available(iOS 15.0, macOS 12.0, *)
 public final class PerformanceManager {
@@ -114,20 +110,14 @@ public final class PerformanceManager {
         struct FrameData {
             let pixelBuffer: CVPixelBuffer
             let timestamp: CFTimeInterval
-            let priority: AnalysisPriority
-        }
-        
-        enum AnalysisPriority: Int, CaseIterable {
-            case low = 0
-            case normal = 1
-            case high = 2
+            let priority: TaskPriorityLevel
         }
         
         init(capacity: Int) {
             self.capacity = capacity
         }
         
-        func addFrame(_ pixelBuffer: CVPixelBuffer, timestamp: CFTimeInterval, priority: AnalysisPriority = .normal) {
+        func addFrame(_ pixelBuffer: CVPixelBuffer, timestamp: CFTimeInterval, priority: TaskPriorityLevel = .normal) {
             queue.async {
                 let frameData = FrameData(pixelBuffer: pixelBuffer, timestamp: timestamp, priority: priority)
                 
@@ -389,8 +379,7 @@ public final class PerformanceManager {
     // MARK: - Frame Buffer Management
     
     public func addFrameToBuffer(_ pixelBuffer: CVPixelBuffer, timestamp: CFTimeInterval, priority: AnalysisPriority = .normal) {
-        let bufferPriority = FrameBuffer.AnalysisPriority(rawValue: priority.rawValue) ?? .normal
-        frameBuffer.addFrame(pixelBuffer, timestamp: timestamp, priority: bufferPriority)
+        frameBuffer.addFrame(pixelBuffer, timestamp: timestamp, priority: priority)
     }
     
     public func processNextFrameFromBuffer(completion: @escaping (CVPixelBuffer?) -> Void) {
@@ -434,22 +423,33 @@ public final class PerformanceManager {
         return createPixelBufferFromImage(optimizedImage)
     }
     
+    // Shared CIContext for optimal performance - avoid creating new contexts
+    private static let sharedCIContext: CIContext = {
+        let options: [CIContextOption: Any] = [
+            .useSoftwareRenderer: false,
+            .cacheIntermediates: true,
+            .name: "NeuroViews-PerformanceManager"
+        ]
+        return CIContext(options: options)
+    }()
+    
     private func createPixelBufferFromImage(_ image: CIImage) -> CVPixelBuffer? {
-        let context = CIContext()
         let size = image.extent.size
         
-        let attributes = [
-            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue
-        ] as CFDictionary
+        // Optimized attributes for better performance
+        let attributes: [String: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] // Enable hardware acceleration
+        ]
         
         var pixelBuffer: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
             Int(size.width),
             Int(size.height),
-            kCVPixelFormatType_32ARGB,
-            attributes,
+            kCVPixelFormatType_32BGRA, // Use BGRA for better iOS compatibility
+            attributes as CFDictionary,
             &pixelBuffer
         )
         
@@ -457,7 +457,8 @@ public final class PerformanceManager {
             return nil
         }
         
-        context.render(image, to: buffer)
+        // Use shared context for consistent performance
+        Self.sharedCIContext.render(image, to: buffer)
         return buffer
     }
     

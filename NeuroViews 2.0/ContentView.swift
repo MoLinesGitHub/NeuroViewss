@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(DataManager.self) private var dataManager
     @Query private var items: [Item]
 
     var body: some View {
@@ -64,6 +64,19 @@ struct ContentView: View {
                                                         value: "Current status: Week 15, Testing and Quality Assurance completed", 
                                                         comment: "Accessibility label for status"))
                 
+                // Botón de prueba para verificar SwiftData
+                Button("Test SwiftData") {
+                    Task {
+                        await testSwiftDataOperations()
+                    }
+                }
+                .buttonStyle(.bordered)
+                
+                // Mostrar contador de items
+                Text("Items almacenados: \(items.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
                 Spacer()
             }
             .padding()
@@ -77,17 +90,58 @@ struct ContentView: View {
 #endif
     }
 
+    // MARK: - SwiftData Test Operations
+    
+    /// Función de prueba para verificar que SwiftData funciona correctamente
+    private func testSwiftDataOperations() async {
+        do {
+            // Crear un nuevo item de prueba
+            let testItem = Item(timestamp: Date(), title: "Item de prueba - \(Date().formatted())")
+            
+            // Insertarlo usando nuestro DataManager
+            try await dataManager.insertItem(testItem)
+            
+            print("✅ Item de prueba creado exitosamente")
+            
+            // Opcional: eliminar items antiguos para mantener la base de datos limpia
+            await cleanupOldTestItems()
+            
+        } catch {
+            print("❌ Error en operación de prueba: \(error)")
+        }
+    }
+    
+    /// Limpiar items de prueba antiguos (mantener solo los últimos 5)
+    private func cleanupOldTestItems() async {
+        let allItems = await dataManager.fetchAllItems()
+        
+        // Si hay más de 5 items, eliminar los más antiguos
+        if allItems.count > 5 {
+            let itemsToDelete = Array(allItems.suffix(allItems.count - 5))
+            
+            for item in itemsToDelete {
+                do {
+                    try await dataManager.deleteItem(item)
+                } catch {
+                    print("⚠️ Error eliminando item antiguo: \(error)")
+                }
+            }
+        }
+    }
+    
+    // MARK: - Legacy Methods (mantenidos por compatibilidad)
+
     private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+        Task {
+            let newItem = Item(timestamp: Date(), title: "Item manual")
+            try? await dataManager.insertItem(newItem)
         }
     }
 
     private func deleteItems(offsets: IndexSet) {
-        withAnimation {
+        Task {
             for index in offsets {
-                modelContext.delete(items[index])
+                try? await dataManager.deleteItem(items[index])
             }
         }
     }
@@ -96,4 +150,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .modelContainer(for: Item.self, inMemory: true)
+        .environment(DataManager())
 }

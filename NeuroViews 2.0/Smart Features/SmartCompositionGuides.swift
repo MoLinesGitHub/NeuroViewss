@@ -34,9 +34,9 @@ public final class SmartCompositionGuides: ObservableObject {
     private let historyLimit = 5
     
     // Vision requests
-    nonisolated(unsafe) private lazy var facesRequest = VNDetectFaceRectanglesRequest()
-    nonisolated(unsafe) private lazy var rectanglesRequest = VNDetectRectanglesRequest()
-    nonisolated(unsafe) private lazy var horizonRequest = VNDetectHorizonRequest()
+    private var facesRequest: VNDetectFaceRectanglesRequest?
+    private var rectanglesRequest: VNDetectRectanglesRequest?
+    private var horizonRequest: VNDetectHorizonRequest?
     
     // MARK: - Initialization
     public init() {
@@ -44,14 +44,19 @@ public final class SmartCompositionGuides: ObservableObject {
     }
     
     private func setupVisionRequests() {
-        // Configure face detection
-        facesRequest.revision = VNDetectFaceRectanglesRequestRevision3
+        // Initialize and configure face detection
+        facesRequest = VNDetectFaceRectanglesRequest()
+        facesRequest?.revision = VNDetectFaceRectanglesRequestRevision3
+        
+        // Initialize other requests
+        rectanglesRequest = VNDetectRectanglesRequest()
+        horizonRequest = VNDetectHorizonRequest()
         
         // Configure rectangle detection
-        rectanglesRequest.minimumAspectRatio = 0.3
-        rectanglesRequest.maximumAspectRatio = 1.7
-        rectanglesRequest.minimumSize = 0.1
-        rectanglesRequest.minimumConfidence = 0.6
+        rectanglesRequest?.minimumAspectRatio = 0.3
+        rectanglesRequest?.maximumAspectRatio = 1.7
+        rectanglesRequest?.minimumSize = 0.1
+        rectanglesRequest?.minimumConfidence = 0.6
         
         // Configure horizon detection - VNDetectHorizonRequest doesn't have minimumConfidence
         // Available on iOS 14.0+
@@ -102,7 +107,7 @@ public final class SmartCompositionGuides: ObservableObject {
     
     // MARK: - Private Analysis Methods
     
-    nonisolated private func performVisionAnalysis(_ pixelBuffer: CVPixelBuffer) async -> CompositionAnalysis {
+    private func performVisionAnalysis(_ pixelBuffer: CVPixelBuffer) async -> CompositionAnalysis {
         let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
         
         var detectedFaces: [VNFaceObservation] = []
@@ -111,31 +116,45 @@ public final class SmartCompositionGuides: ObservableObject {
         var confidence: Float = 0.0
         
         do {
-            // Perform face detection
-            try imageRequestHandler.perform([facesRequest])
-            if let faces = facesRequest.results {
-                detectedFaces = faces
-                confidence += 0.3
+            // Batch all Vision requests together for optimal performance
+            var visionRequests: [VNRequest] = []
+            
+            if let facesReq = facesRequest {
+                visionRequests.append(facesReq)
             }
             
-            // Perform rectangle detection
-            try imageRequestHandler.perform([rectanglesRequest])
-            if let rectangles = rectanglesRequest.results {
-                detectedRectangles = rectangles
-                confidence += 0.2
+            if let rectanglesReq = rectanglesRequest {
+                visionRequests.append(rectanglesReq)
             }
             
-            // Perform horizon detection (iOS 14+)
-            if #available(iOS 14.0, *) {
-                try imageRequestHandler.perform([horizonRequest])
-                if let horizon = horizonRequest.results?.first {
+            if #available(iOS 14.0, *), let horizonReq = horizonRequest {
+                visionRequests.append(horizonReq)
+            }
+            
+            // Single batch execution - much more efficient than separate calls
+            if !visionRequests.isEmpty {
+                try imageRequestHandler.perform(visionRequests)
+                
+                // Process results from batch execution
+                if let facesReq = facesRequest, let faces = facesReq.results {
+                    detectedFaces = faces
+                    confidence += 0.3
+                }
+                
+                if let rectanglesReq = rectanglesRequest, let rectangles = rectanglesReq.results {
+                    detectedRectangles = rectangles
+                    confidence += 0.2
+                }
+                
+                if #available(iOS 14.0, *), let horizonReq = horizonRequest,
+                   let horizon = horizonReq.results?.first {
                     horizonAngle = Float(horizon.angle)
                     confidence += 0.2
                 }
             }
             
         } catch {
-            print("Vision analysis error: \(error)")
+            print("Batch vision analysis error: \(error)")
         }
         
         return CompositionAnalysis(

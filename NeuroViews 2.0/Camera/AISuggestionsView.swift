@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 @available(iOS 15.0, macOS 12.0, *)
 struct AISuggestionsView: View {

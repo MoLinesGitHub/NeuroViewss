@@ -300,7 +300,7 @@ struct SmartAutoFocusView: View {
         }
     }
     
-    private func subjectTypeIcon(_ type: DetectedSubject.SubjectType) -> String {
+    private func subjectTypeIcon(_ type: SubjectType) -> String {
         switch type {
         case .face: return "person.crop.circle"
         case .humanBody: return "figure.stand"
@@ -390,7 +390,15 @@ struct FocusModePickerView: View {
                 }
             }
             .navigationTitle("Modo de Enfoque")
+            #if os(iOS) || os(tvOS)
             .navigationBarItems(trailing: Button("Cerrar", action: onDismiss))
+            #else
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Cerrar", action: onDismiss)
+                }
+            }
+            #endif
         }
     }
     

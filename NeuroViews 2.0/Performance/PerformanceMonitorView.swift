@@ -249,7 +249,7 @@ struct PerformanceMonitorView: View {
                             await performanceMonitor.startMonitoring()
                             await memoryOptimizer.startOptimization()
                             await batteryOptimizer.startOptimization()
-                            await nvaiKit.startPerformanceOptimization()
+                            // await nvaiKit.startPerformanceOptimization()
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
@@ -257,7 +257,7 @@ struct PerformanceMonitorView: View {
                 
                 Button("Limpiar Memoria") {
                     Task {
-                        await nvaiKit.performMemoryCleanup()
+                        // await nvaiKit.performMemoryCleanup()
                     }
                 }
                 .buttonStyle(SecondaryButtonStyle())
@@ -300,7 +300,7 @@ struct PerformanceMonitorView: View {
                     await performanceMonitor.startMonitoring()
                     await memoryOptimizer.startOptimization()
                     await batteryOptimizer.startOptimization()
-                    await nvaiKit.startPerformanceOptimization()
+                    // await nvaiKit.startPerformanceOptimization()
                 }
             }
             .buttonStyle(PrimaryButtonStyle())

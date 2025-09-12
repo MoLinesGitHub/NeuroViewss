@@ -357,7 +357,15 @@ struct GuideTypePickerView: View {
                 }
             }
             .navigationTitle("Guías de Composición")
+            #if os(iOS) || os(tvOS)
             .navigationBarItems(trailing: Button("Cerrar", action: onDismiss))
+            #else
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Cerrar", action: onDismiss)
+                }
+            }
+            #endif
         }
     }
     
