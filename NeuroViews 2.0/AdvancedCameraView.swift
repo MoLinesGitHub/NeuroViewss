@@ -3,14 +3,85 @@
 //  NeuroViews 2.0
 //
 //  Created by NeuroViews AI on 12/9/24.
-//  Updated: Week 14 - Accessibility & Localization
+//  Updated: Week 16 - Core Camera Implementation
 //
 
 import SwiftUI
+import AVFoundation
 
 @available(iOS 15.0, macOS 12.0, *)
 struct AdvancedCameraView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @StateObject private var cameraManager = CameraManager()
+    @State private var showingCamera = false
+    
+    var body: some View {
+        ZStack {
+            if showingCamera && cameraManager.isAuthorized {
+                CameraInterfaceView(cameraManager: cameraManager, showingCamera: $showingCamera)
+            } else {
+                CameraSetupView(showingCamera: $showingCamera)
+            }
+        }
+        .onAppear {
+            // Camera manager auto-initializes
+        }
+        .alert("Camera Error", isPresented: .constant(cameraManager.errorMessage != nil)) {
+            Button("OK") {
+                cameraManager.errorMessage = nil
+            }
+        } message: {
+            if let errorMessage = cameraManager.errorMessage {
+                Text(errorMessage)
+            }
+        }
+    }
+    
+    // MARK: - Adaptive Layout Properties
+    
+    private var adaptiveSpacing: CGFloat {
+        switch dynamicTypeSize {
+        case .xSmall, .small, .medium:
+            return 30
+        case .large, .xLarge:
+            return 35
+        case .xxLarge, .xxxLarge:
+            return 40
+        default:
+            return 45
+        }
+    }
+    
+    private var adaptiveIconSize: CGFloat {
+        switch dynamicTypeSize {
+        case .xSmall, .small:
+            return 60
+        case .medium, .large:
+            return 80
+        case .xLarge, .xxLarge:
+            return 100
+        default:
+            return 120
+        }
+    }
+    
+    private var adaptivePadding: CGFloat {
+        switch dynamicTypeSize {
+        case .xSmall, .small, .medium:
+            return 24
+        case .large, .xLarge:
+            return 28
+        default:
+            return 32
+        }
+    }
+    
+}
+
+// MARK: - Camera Setup View
+struct CameraSetupView: View {
+    @Binding var showingCamera: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     
     var body: some View {
@@ -78,7 +149,7 @@ struct AdvancedCameraView: View {
                                                         comment: "Section label for camera features"))
                     
                     // Start Button with accessibility
-                    Button(action: startCameraSession) {
+                    Button(action: { showingCamera = true }) {
                         HStack {
                             Image(systemName: "play.circle.fill")
                                 .font(.title3)
@@ -97,16 +168,12 @@ struct AdvancedCameraView: View {
                                                        value: "Double tap to begin advanced camera interface with AI guidance", 
                                                        comment: "Accessibility hint for start button"))
                     
-                    // Status indicator
-                    Text(NSLocalizedString("week.status", 
-                                         value: "Week 14: Accessibility & Localization ✅", 
-                                         comment: "Current week status"))
+                    // Status indicator - Updated for Week 16
+                    Text("Week 16: Core Camera Implementation 🎥")
                         .font(.caption)
-                        .foregroundColor(.green)
+                        .foregroundColor(.blue)
                         .fontWeight(.semibold)
-                        .accessibilityLabel(NSLocalizedString("status.accessibility", 
-                                                            value: "Current status: Week 14, Accessibility and Localization completed", 
-                                                            comment: "Accessibility label for status"))
+                        .accessibilityLabel("Current status: Week 16, Core Camera Implementation in progress")
                     
                     Spacer(minLength: 20)
                 }
@@ -159,19 +226,126 @@ struct AdvancedCameraView: View {
             return 32
         }
     }
+}
+
+// MARK: - Camera Interface View
+struct CameraInterfaceView: View {
+    @ObservedObject var cameraManager: CameraManager
+    @Binding var showingCamera: Bool
     
-    // MARK: - Actions
-    
-    private func startCameraSession() {
-        print("🎥 Advanced Camera - Full integration pending NVAIKit linkage")
-        
-        // Accessibility announcement
-        #if os(iOS)
-        let announcement = NSLocalizedString("camera.starting.announcement", 
-                                           value: "Camera interface starting", 
-                                           comment: "Announcement when camera starts")
-        UIAccessibility.post(notification: .announcement, argument: announcement)
-        #endif
+    var body: some View {
+        ZStack {
+            // Camera Preview
+            #if os(iOS)
+            InteractiveCameraPreviewView(
+                previewLayer: cameraManager.getPreviewLayer(),
+                onTapToFocus: { point, layer in
+                    cameraManager.focusAt(point: point, in: layer)
+                }
+            )
+            #else
+            // En macOS mostraremos un placeholder
+            Rectangle()
+                .fill(Color.black)
+                .overlay(
+                    VStack {
+                        Image(systemName: "camera.metering.center.weighted.average")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white)
+                        Text("macOS Camera Support Coming Soon")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                    }
+                )
+            #endif
+            
+            // Camera Controls Overlay
+            VStack {
+                // Top Controls
+                HStack {
+                    Button("Close") {
+                        showingCamera = false
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                    
+                    Spacer()
+                    
+                    Button(action: { cameraManager.switchCamera() }) {
+                        Image(systemName: "camera.rotate.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                    }
+                    .padding()
+                }
+                
+                Spacer()
+                
+                // Bottom Controls
+                HStack(spacing: 30) {
+                    // Gallery (placeholder)
+                    Button(action: {}) {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white, lineWidth: 2)
+                            .frame(width: 50, height: 50)
+                    }
+                    
+                    // Capture Button
+                    Button(action: { cameraManager.capturePhoto() }) {
+                        Circle()
+                            .stroke(Color.white, lineWidth: 4)
+                            .frame(width: 70, height: 70)
+                            .overlay(
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 60, height: 60)
+                            )
+                    }
+                    .accessibilityLabel("Take Photo")
+                    .accessibilityHint("Double tap to capture photo")
+                    
+                    // Settings (placeholder)
+                    Button(action: {}) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                    }
+                }
+                .padding(.bottom, 50)
+            }
+            
+            // Zoom Control (optional)
+            if cameraManager.zoomFactor > 1.0 {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        VStack {
+                            Text("\(cameraManager.zoomFactor, specifier: "%.1f")x")
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(8)
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 120)
+                    }
+                }
+            }
+        }
+        .background(Color.black)
+        .ignoresSafeArea()
+        .onAppear {
+            #if os(iOS)
+            cameraManager.startSession()
+            #endif
+        }
+        .onDisappear {
+            #if os(iOS)
+            cameraManager.stopSession()
+            #endif
+        }
     }
 }
 
