@@ -423,16 +423,6 @@ public struct FrameAnalysis: Sendable {
 
 // MARK: - Supporting Types
 
-@available(iOS 15.0, macOS 12.0, *)
-public enum SuggestionPriority: String, CaseIterable, Sendable {
-    case low = "low"
-    case medium = "medium"
-    case high = "high"
-    
-    public var displayName: String {
-        return rawValue.capitalized
-    }
-}
 
 
 @available(iOS 15.0, macOS 12.0, *)

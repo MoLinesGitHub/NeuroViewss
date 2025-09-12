@@ -151,3 +151,14 @@ public enum FilterType: String, Codable, CaseIterable, Sendable {
     case warm = "warm"
     case cool = "cool"
 }
+
+public enum SuggestionPriority: String, CaseIterable, Sendable {
+    case low = "low"
+    case medium = "medium"
+    case high = "high"
+    case critical = "critical"
+    
+    public var displayName: String {
+        return rawValue.capitalized
+    }
+}
