@@ -1,0 +1,365 @@
+//
+//  SubjectDetector.swift
+//  NeuroViews 2.0
+//
+//  Created by NeuroViews AI on 12/9/24.
+//  Week 17: AI Integration Foundation
+//
+
+import Foundation
+import CoreImage
+import Vision
+import AVFoundation
+
+@available(iOS 15.0, macOS 12.0, *)
+public final class SubjectDetector: AIAnalyzer {
+    
+    // MARK: - AIAnalyzer Protocol
+    public let analysisType: AIAnalysisType = .subject
+    public var isEnabled: Bool = true
+    
+    // MARK: - Properties
+    private var settings: SubjectDetectionSettings = .default
+    private let visionQueue = DispatchQueue(label: "com.neuroviews.subject.vision", qos: .userInitiated)
+    
+    // Vision requests
+    private lazy var faceDetectionRequest: VNDetectFaceRectanglesRequest = {
+        return VNDetectFaceRectanglesRequest()
+    }()
+    
+    private lazy var objectDetectionRequest: VNRecognizeAnimalsRequest = {
+        return VNRecognizeAnimalsRequest()
+    }()
+    
+    private lazy var humanDetectionRequest: VNDetectHumanRectanglesRequest = {
+        return VNDetectHumanRectanglesRequest()
+    }()
+    
+    // MARK: - Configuration
+    public func configure(with settings: [String: Any]) {
+        if let faceDetectionEnabled = settings["faceDetectionEnabled"] as? Bool {
+            self.settings.faceDetectionEnabled = faceDetectionEnabled
+        }
+        if let humanDetectionEnabled = settings["humanDetectionEnabled"] as? Bool {
+            self.settings.humanDetectionEnabled = humanDetectionEnabled
+        }
+        if let animalDetectionEnabled = settings["animalDetectionEnabled"] as? Bool {
+            self.settings.animalDetectionEnabled = animalDetectionEnabled
+        }
+        if let objectDetectionEnabled = settings["objectDetectionEnabled"] as? Bool {
+            self.settings.objectDetectionEnabled = objectDetectionEnabled
+        }
+        if let confidenceThreshold = settings["confidenceThreshold"] as? Float {
+            self.settings.confidenceThreshold = confidenceThreshold
+        }
+    }
+    
+    // MARK: - Analysis
+    public func analyze(frame: CVPixelBuffer) -> AIAnalysis? {
+        guard isEnabled else { return nil }
+        
+        var detectedSubjects: [DetectedSubject] = []
+        var totalConfidence: Float = 0.0
+        var suggestions: [AISuggestion] = []
+        
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        // Perform vision analysis on background queue
+        visionQueue.async { [weak self] in
+            guard let self = self else {
+                semaphore.signal()
+                return
+            }
+            
+            let handler = VNImageRequestHandler(cvPixelBuffer: frame, options: [:])
+            var requests: [VNRequest] = []
+            
+            // Face Detection
+            if self.settings.faceDetectionEnabled {
+                requests.append(self.faceDetectionRequest)
+            }
+            
+            // Human Detection
+            if self.settings.humanDetectionEnabled {
+                requests.append(self.humanDetectionRequest)
+            }
+            
+            // Animal Detection
+            if self.settings.animalDetectionEnabled {
+                requests.append(self.objectDetectionRequest)
+            }
+            
+            do {
+                try handler.perform(requests)
+                
+                // Process face detection results
+                if self.settings.faceDetectionEnabled {
+                    let faces = self.processFaceDetection(results: self.faceDetectionRequest.results)
+                    detectedSubjects.append(contentsOf: faces)
+                }
+                
+                // Process human detection results
+                if self.settings.humanDetectionEnabled {
+                    let humans = self.processHumanDetection(results: self.humanDetectionRequest.results)
+                    detectedSubjects.append(contentsOf: humans)
+                }
+                
+                // Process animal detection results
+                if self.settings.animalDetectionEnabled {
+                    let animals = self.processAnimalDetection(results: self.objectDetectionRequest.results)
+                    detectedSubjects.append(contentsOf: animals)
+                }
+                
+                // Calculate overall confidence
+                if !detectedSubjects.isEmpty {
+                    totalConfidence = detectedSubjects.map { $0.confidence }.reduce(0, +) / Float(detectedSubjects.count)
+                    
+                    // Generate suggestions
+                    suggestions = self.generateSubjectSuggestions(subjects: detectedSubjects, frameSize: CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame)))
+                }
+                
+            } catch {
+                print("❌ Subject detection error: \(error)")
+            }
+            
+            semaphore.signal()
+        }
+        
+        // Wait for analysis to complete (with timeout)
+        _ = semaphore.wait(timeout: .now() + 2.0)
+        
+        let analysisData: [String: Any] = [
+            "detectedSubjects": detectedSubjects.map { $0.toDictionary() },
+            "subjectCount": detectedSubjects.count
+        ]
+        
+        return AIAnalysis(
+            type: .subject,
+            confidence: totalConfidence,
+            data: analysisData,
+            suggestions: suggestions
+        )
+    }
+    
+    // MARK: - Private Processing Methods
+    
+    private func processFaceDetection(results: [VNFaceObservation]?) -> [DetectedSubject] {
+        guard let results = results else { return [] }
+        
+        return results.compactMap { observation in
+            guard observation.confidence >= settings.confidenceThreshold else { return nil }
+            
+            return DetectedSubject(
+                type: .face,
+                boundingBox: observation.boundingBox,
+                confidence: observation.confidence,
+                attributes: extractFaceAttributes(from: observation)
+            )
+        }
+    }
+    
+    private func processHumanDetection(results: [VNHumanObservation]?) -> [DetectedSubject] {
+        guard let results = results else { return [] }
+        
+        return results.compactMap { observation in
+            guard observation.confidence >= settings.confidenceThreshold else { return nil }
+            
+            return DetectedSubject(
+                type: .human,
+                boundingBox: observation.boundingBox,
+                confidence: observation.confidence,
+                attributes: [
+                    "upperBodyOnly": observation.upperBodyOnly
+                ]
+            )
+        }
+    }
+    
+    private func processAnimalDetection(results: [VNRecognizedObjectObservation]?) -> [DetectedSubject] {
+        guard let results = results else { return [] }
+        
+        return results.compactMap { observation in
+            guard observation.confidence >= settings.confidenceThreshold else { return nil }
+            
+            // Extract animal type from labels
+            let animalLabels = observation.labels.compactMap { label -> String? in
+                return label.identifier.lowercased().contains("animal") ? label.identifier : nil
+            }
+            
+            return DetectedSubject(
+                type: .animal,
+                boundingBox: observation.boundingBox,
+                confidence: observation.confidence,
+                attributes: [
+                    "labels": animalLabels,
+                    "primaryLabel": observation.labels.first?.identifier ?? "unknown"
+                ]
+            )
+        }
+    }
+    
+    private func extractFaceAttributes(from observation: VNFaceObservation) -> [String: Any] {
+        var attributes: [String: Any] = [:]
+        
+        // Add face landmarks if available
+        if let landmarks = observation.landmarks {
+            attributes["hasLandmarks"] = true
+            attributes["landmarksCount"] = landmarks.allPoints?.normalizedPoints.count ?? 0
+        }
+        
+        return attributes
+    }
+    
+    private func generateSubjectSuggestions(subjects: [DetectedSubject], frameSize: CGSize) -> [AISuggestion] {
+        var suggestions: [AISuggestion] = []
+        
+        // Check subject positioning
+        for subject in subjects {
+            let centerX = subject.boundingBox.midX
+            let centerY = subject.boundingBox.midY
+            
+            // Rule of thirds suggestions
+            let isOnThirdsX = abs(centerX - 0.33) < 0.1 || abs(centerX - 0.67) < 0.1
+            let isOnThirdsY = abs(centerY - 0.33) < 0.1 || abs(centerY - 0.67) < 0.1
+            
+            if !isOnThirdsX && !isOnThirdsY {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Subject Positioning",
+                        message: "Try positioning the \(subject.type.displayName) on rule of thirds lines",
+                        confidence: 0.7,
+                        priority: .medium
+                    )
+                )
+            }
+            
+            // Size suggestions
+            let subjectSize = subject.boundingBox.width * subject.boundingBox.height
+            if subjectSize < 0.1 { // Subject is less than 10% of frame
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Subject Size",
+                        message: "Consider getting closer to the \(subject.type.displayName) for better impact",
+                        confidence: 0.8,
+                        priority: .medium
+                    )
+                )
+            } else if subjectSize > 0.7 { // Subject is more than 70% of frame
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Subject Size",
+                        message: "Try stepping back to give the \(subject.type.displayName) more breathing room",
+                        confidence: 0.6,
+                        priority: .low
+                    )
+                )
+            }
+        }
+        
+        // Multiple subjects suggestions
+        if subjects.count > 1 {
+            let faces = subjects.filter { $0.type == .face }
+            if faces.count > 1 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Group Photo",
+                        message: "Multiple faces detected. Ensure everyone is well-lit and in focus",
+                        confidence: 0.9,
+                        priority: .medium
+                    )
+                )
+            }
+        }
+        
+        // No subject suggestions
+        if subjects.isEmpty {
+            suggestions.append(
+                AISuggestion(
+                    type: .composition,
+                    title: "No Clear Subject",
+                    message: "No clear subject detected. Try focusing on a specific person, object, or scene element",
+                    confidence: 0.8,
+                    priority: .medium
+                )
+            )
+        }
+        
+        return suggestions
+    }
+}
+
+// MARK: - Configuration
+public struct SubjectDetectionSettings {
+    public var faceDetectionEnabled: Bool
+    public var humanDetectionEnabled: Bool
+    public var animalDetectionEnabled: Bool
+    public var objectDetectionEnabled: Bool
+    public var confidenceThreshold: Float
+    
+    public static let `default` = SubjectDetectionSettings(
+        faceDetectionEnabled: true,
+        humanDetectionEnabled: true,
+        animalDetectionEnabled: true,
+        objectDetectionEnabled: false, // More resource intensive
+        confidenceThreshold: 0.5
+    )
+}
+
+// MARK: - Subject Detection Results
+public struct DetectedSubject {
+    public let type: SubjectType
+    public let boundingBox: CGRect
+    public let confidence: Float
+    public let attributes: [String: Any]
+    
+    public func toDictionary() -> [String: Any] {
+        return [
+            "type": type.rawValue,
+            "boundingBox": [
+                "x": boundingBox.origin.x,
+                "y": boundingBox.origin.y,
+                "width": boundingBox.width,
+                "height": boundingBox.height
+            ],
+            "confidence": confidence,
+            "attributes": attributes
+        ]
+    }
+}
+
+public enum SubjectType: String, CaseIterable {
+    case face = "face"
+    case human = "human"
+    case animal = "animal"
+    case object = "object"
+    
+    public var displayName: String {
+        switch self {
+        case .face:
+            return "face"
+        case .human:
+            return "person"
+        case .animal:
+            return "animal"
+        case .object:
+            return "object"
+        }
+    }
+    
+    public var icon: String {
+        switch self {
+        case .face:
+            return "face.smiling"
+        case .human:
+            return "person"
+        case .animal:
+            return "pawprint"
+        case .object:
+            return "cube"
+        }
+    }
+}

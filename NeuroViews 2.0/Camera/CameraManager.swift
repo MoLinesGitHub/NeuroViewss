@@ -29,17 +29,27 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var cameraPosition: AVCaptureDevice.Position = .back
     @Published var zoomFactor: CGFloat = 1.0
     
+    // AI Analysis Properties
+    @Published var currentAnalysis: AIAnalysisResult?
+    @Published var aiSuggestions: [AISuggestion] = []
+    @Published var isAIAnalysisEnabled = true
+    
     // MARK: - Camera Session Components
     nonisolated private let captureSession = AVCaptureSession()
     nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
     nonisolated(unsafe) private var photoOutput = AVCapturePhotoOutput()
     nonisolated(unsafe) private var videoOutput = AVCaptureMovieFileOutput()
+    nonisolated(unsafe) private var videoDataOutput = AVCaptureVideoDataOutput()
     nonisolated(unsafe) private var previewLayer: AVCaptureVideoPreviewLayer?
     
     // MARK: - Camera Properties
     nonisolated private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    nonisolated private let videoDataQueue = DispatchQueue(label: "camera.videodata.queue")
     nonisolated(unsafe) private var setupResult: SessionSetupResult = .success
     nonisolated(unsafe) private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
+    
+    // AI Analysis
+    private let aiKit = NVAIKit.shared
     
     // MARK: - Session Setup Result
     private enum SessionSetupResult {
@@ -121,6 +131,9 @@ final class CameraManager: NSObject, ObservableObject {
             // Setup video output for future video recording
             self.setupVideoOutput()
             
+            // Setup video data output for AI analysis
+            self.setupVideoDataOutput()
+            
             self.captureSession.commitConfiguration()
             
             DispatchQueue.main.async {
@@ -191,6 +204,22 @@ final class CameraManager: NSObject, ObservableObject {
         } else {
             print("⚠️ Could not add video output to the session")
             // Video output is optional, don't fail setup
+        }
+    }
+    
+    nonisolated private func setupVideoDataOutput() {
+        if captureSession.canAddOutput(videoDataOutput) {
+            captureSession.addOutput(videoDataOutput)
+            
+            videoDataOutput.videoSettings = [
+                (kCVPixelBufferPixelFormatTypeKey as String): kCVPixelFormatType_32BGRA
+            ]
+            videoDataOutput.setSampleBufferDelegate(self, queue: videoDataQueue)
+            
+            // Don't drop frames for real-time analysis
+            videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        } else {
+            print("⚠️ Could not add video data output to the session")
         }
     }
     
@@ -443,4 +472,37 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
         }
     }
     #endif
+}
+
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
+    
+    nonisolated func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        // Check if AI analysis is enabled on main actor
+        Task { @MainActor in
+            guard self.isAIAnalysisEnabled else { return }
+            
+            // Process the frame
+            self.processFrameForAI(sampleBuffer)
+        }
+    }
+    
+    @MainActor
+    private func processFrameForAI(_ sampleBuffer: CMSampleBuffer) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        
+        // Analyze frame with AI
+        aiKit.analyzeFrame(pixelBuffer) { [weak self] result in
+            Task { @MainActor in
+                self?.currentAnalysis = result
+                self?.aiSuggestions = result.suggestions
+            }
+        }
+    }
 }

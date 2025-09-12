@@ -1,0 +1,322 @@
+//
+//  CompositionAnalyzer.swift
+//  NeuroViews 2.0
+//
+//  Created by NeuroViews AI on 12/9/24.
+//  Week 17: AI Integration Foundation
+//
+
+import Foundation
+import CoreImage
+import Vision
+import AVFoundation
+
+@available(iOS 15.0, macOS 12.0, *)
+public final class CompositionAnalyzer: AIAnalyzer {
+    
+    // MARK: - AIAnalyzer Protocol
+    public let analysisType: AIAnalysisType = .composition
+    public var isEnabled: Bool = true
+    
+    // MARK: - Properties
+    private let ciContext = CIContext()
+    private var settings: CompositionSettings = .default
+    
+    // MARK: - Configuration
+    public func configure(with settings: [String: Any]) {
+        if let ruleOfThirdsEnabled = settings["ruleOfThirdsEnabled"] as? Bool {
+            self.settings.ruleOfThirdsEnabled = ruleOfThirdsEnabled
+        }
+        if let goldenRatioEnabled = settings["goldenRatioEnabled"] as? Bool {
+            self.settings.goldenRatioEnabled = goldenRatioEnabled
+        }
+        if let symmetryEnabled = settings["symmetryEnabled"] as? Bool {
+            self.settings.symmetryEnabled = symmetryEnabled
+        }
+        if let leadingLinesEnabled = settings["leadingLinesEnabled"] as? Bool {
+            self.settings.leadingLinesEnabled = leadingLinesEnabled
+        }
+    }
+    
+    // MARK: - Analysis
+    public func analyze(frame: CVPixelBuffer) -> AIAnalysis? {
+        guard isEnabled else { return nil }
+        
+        let ciImage = CIImage(cvPixelBuffer: frame)
+        var analysisData: [String: Any] = [:]
+        var suggestions: [AISuggestion] = []
+        var totalConfidence: Float = 0.0
+        var analysisCount = 0
+        
+        // Rule of Thirds Analysis
+        if settings.ruleOfThirdsEnabled {
+            let ruleOfThirdsResult = analyzeRuleOfThirds(image: ciImage)
+            analysisData["ruleOfThirds"] = ruleOfThirdsResult
+            totalConfidence += ruleOfThirdsResult.confidence
+            analysisCount += 1
+            
+            if ruleOfThirdsResult.confidence < 0.6 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Rule of Thirds",
+                        message: "Try placing your subject along the grid lines for better composition",
+                        confidence: 1.0 - ruleOfThirdsResult.confidence,
+                        priority: .medium
+                    )
+                )
+            }
+        }
+        
+        // Golden Ratio Analysis
+        if settings.goldenRatioEnabled {
+            let goldenRatioResult = analyzeGoldenRatio(image: ciImage)
+            analysisData["goldenRatio"] = goldenRatioResult
+            totalConfidence += goldenRatioResult.confidence
+            analysisCount += 1
+            
+            if goldenRatioResult.confidence < 0.5 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Golden Ratio",
+                        message: "Consider the golden ratio for more pleasing proportions",
+                        confidence: 1.0 - goldenRatioResult.confidence,
+                        priority: .low
+                    )
+                )
+            }
+        }
+        
+        // Symmetry Analysis
+        if settings.symmetryEnabled {
+            let symmetryResult = analyzeSymmetry(image: ciImage)
+            analysisData["symmetry"] = symmetryResult
+            totalConfidence += symmetryResult.confidence
+            analysisCount += 1
+            
+            if symmetryResult.hasSymmetry && symmetryResult.confidence < 0.7 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Symmetry",
+                        message: "Align your shot for better symmetrical balance",
+                        confidence: 1.0 - symmetryResult.confidence,
+                        priority: .medium
+                    )
+                )
+            }
+        }
+        
+        // Leading Lines Detection
+        if settings.leadingLinesEnabled {
+            let leadingLinesResult = analyzeLeadingLines(image: ciImage)
+            analysisData["leadingLines"] = leadingLinesResult
+            totalConfidence += leadingLinesResult.confidence
+            analysisCount += 1
+            
+            if leadingLinesResult.hasLeadingLines && leadingLinesResult.confidence > 0.8 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .composition,
+                        title: "Leading Lines",
+                        message: "Great leading lines detected! They guide the eye nicely",
+                        confidence: leadingLinesResult.confidence,
+                        priority: .low,
+                        actionable: false
+                    )
+                )
+            }
+        }
+        
+        let averageConfidence = analysisCount > 0 ? totalConfidence / Float(analysisCount) : 0.0
+        
+        return AIAnalysis(
+            type: .composition,
+            confidence: averageConfidence,
+            data: analysisData,
+            suggestions: suggestions
+        )
+    }
+    
+    // MARK: - Private Analysis Methods
+    
+    private func analyzeRuleOfThirds(image: CIImage) -> RuleOfThirdsResult {
+        let imageSize = image.extent.size
+        
+        // Rule of thirds grid points
+        let thirdWidth = imageSize.width / 3.0
+        let thirdHeight = imageSize.height / 3.0
+        
+        let gridPoints: [CGPoint] = [
+            CGPoint(x: thirdWidth, y: thirdHeight),
+            CGPoint(x: thirdWidth * 2, y: thirdHeight),
+            CGPoint(x: thirdWidth, y: thirdHeight * 2),
+            CGPoint(x: thirdWidth * 2, y: thirdHeight * 2)
+        ]
+        
+        // Detect interest points near grid intersections
+        let interestPoints = detectInterestPoints(in: image)
+        var alignmentScore: Float = 0.0
+        
+        for gridPoint in gridPoints {
+            let nearbyPoints = interestPoints.filter { point in
+                let distance = sqrt(pow(point.x - gridPoint.x, 2) + pow(point.y - gridPoint.y, 2))
+                return distance < min(imageSize.width, imageSize.height) * 0.1 // 10% of smaller dimension
+            }
+            
+            if !nearbyPoints.isEmpty {
+                alignmentScore += 1.0
+            }
+        }
+        
+        let confidence = min(alignmentScore / Float(gridPoints.count), 1.0)
+        
+        return RuleOfThirdsResult(
+            confidence: confidence,
+            gridPoints: gridPoints,
+            alignedPoints: interestPoints
+        )
+    }
+    
+    private func analyzeGoldenRatio(image: CIImage) -> GoldenRatioResult {
+        let imageSize = image.extent.size
+        let phi: CGFloat = 1.618033988749
+        
+        // Golden ratio spiral points
+        let centerX = imageSize.width / 2
+        let centerY = imageSize.height / 2
+        
+        // Simplified golden ratio analysis - check if subject is near golden ratio points
+        let goldenX = imageSize.width / phi
+        let goldenY = imageSize.height / phi
+        
+        let goldenPoints = [
+            CGPoint(x: goldenX, y: goldenY),
+            CGPoint(x: imageSize.width - goldenX, y: goldenY),
+            CGPoint(x: goldenX, y: imageSize.height - goldenY),
+            CGPoint(x: imageSize.width - goldenX, y: imageSize.height - goldenY)
+        ]
+        
+        let interestPoints = detectInterestPoints(in: image)
+        var alignment: Float = 0.0
+        
+        for goldenPoint in goldenPoints {
+            let nearbyPoints = interestPoints.filter { point in
+                let distance = sqrt(pow(point.x - goldenPoint.x, 2) + pow(point.y - goldenPoint.y, 2))
+                return distance < min(imageSize.width, imageSize.height) * 0.15
+            }
+            if !nearbyPoints.isEmpty {
+                alignment += 1.0
+            }
+        }
+        
+        let confidence = min(alignment / Float(goldenPoints.count), 1.0)
+        
+        return GoldenRatioResult(
+            confidence: confidence,
+            goldenPoints: goldenPoints
+        )
+    }
+    
+    private func analyzeSymmetry(image: CIImage) -> SymmetryResult {
+        let imageSize = image.extent.size
+        
+        // Simplified symmetry detection
+        // In a real implementation, we would use more sophisticated computer vision
+        
+        // Check horizontal symmetry by comparing top and bottom halves
+        let topHalf = image.cropped(to: CGRect(x: 0, y: imageSize.height/2, width: imageSize.width, height: imageSize.height/2))
+        let bottomHalf = image.cropped(to: CGRect(x: 0, y: 0, width: imageSize.width, height: imageSize.height/2))
+        
+        // For now, return a basic symmetry check
+        // This would be more sophisticated in production with histogram comparison
+        let hasSymmetry = true // Placeholder
+        let confidence: Float = 0.5 // Placeholder
+        
+        return SymmetryResult(
+            hasSymmetry: hasSymmetry,
+            confidence: confidence,
+            symmetryType: .horizontal
+        )
+    }
+    
+    private func analyzeLeadingLines(image: CIImage) -> LeadingLinesResult {
+        // Simplified leading lines detection
+        // In production, this would use edge detection and line analysis
+        
+        let hasLeadingLines = false // Placeholder
+        let confidence: Float = 0.3 // Placeholder
+        
+        return LeadingLinesResult(
+            hasLeadingLines: hasLeadingLines,
+            confidence: confidence,
+            lines: []
+        )
+    }
+    
+    private func detectInterestPoints(in image: CIImage) -> [CGPoint] {
+        // Simplified interest point detection
+        // In production, this would use Vision framework or Core Image filters
+        // to detect corners, edges, and high-contrast areas
+        
+        let imageSize = image.extent.size
+        
+        // Return some mock points for now
+        return [
+            CGPoint(x: imageSize.width * 0.3, y: imageSize.height * 0.3),
+            CGPoint(x: imageSize.width * 0.7, y: imageSize.height * 0.7)
+        ]
+    }
+}
+
+// MARK: - Configuration
+public struct CompositionSettings {
+    public var ruleOfThirdsEnabled: Bool
+    public var goldenRatioEnabled: Bool
+    public var symmetryEnabled: Bool
+    public var leadingLinesEnabled: Bool
+    
+    public static let `default` = CompositionSettings(
+        ruleOfThirdsEnabled: true,
+        goldenRatioEnabled: true,
+        symmetryEnabled: true,
+        leadingLinesEnabled: true
+    )
+}
+
+// MARK: - Analysis Results
+public struct RuleOfThirdsResult {
+    public let confidence: Float
+    public let gridPoints: [CGPoint]
+    public let alignedPoints: [CGPoint]
+}
+
+public struct GoldenRatioResult {
+    public let confidence: Float
+    public let goldenPoints: [CGPoint]
+}
+
+public struct SymmetryResult {
+    public let hasSymmetry: Bool
+    public let confidence: Float
+    public let symmetryType: SymmetryType
+    
+    public enum SymmetryType {
+        case horizontal
+        case vertical
+        case radial
+    }
+}
+
+public struct LeadingLinesResult {
+    public let hasLeadingLines: Bool
+    public let confidence: Float
+    public let lines: [LineSegment]
+    
+    public struct LineSegment {
+        public let start: CGPoint
+        public let end: CGPoint
+        public let confidence: Float
+    }
+}

@@ -1,0 +1,414 @@
+//
+//  LightingAnalyzer.swift
+//  NeuroViews 2.0
+//
+//  Created by NeuroViews AI on 12/9/24.
+//  Week 17: AI Integration Foundation
+//
+
+import Foundation
+import CoreImage
+import Vision
+import AVFoundation
+
+@available(iOS 15.0, macOS 12.0, *)
+public final class LightingAnalyzer: AIAnalyzer {
+    
+    // MARK: - AIAnalyzer Protocol
+    public let analysisType: AIAnalysisType = .lighting
+    public var isEnabled: Bool = true
+    
+    // MARK: - Properties
+    private let ciContext = CIContext()
+    private var settings: LightingSettings = .default
+    
+    // Core Image filters for analysis
+    private lazy var histogramFilter: CIFilter? = {
+        return CIFilter(name: "CIAreaHistogram")
+    }()
+    
+    private lazy var exposureFilter: CIFilter? = {
+        return CIFilter(name: "CIExposureAdjust")
+    }()
+    
+    // MARK: - Configuration
+    public func configure(with settings: [String: Any]) {
+        if let brightnessEnabled = settings["brightnessEnabled"] as? Bool {
+            self.settings.brightnessEnabled = brightnessEnabled
+        }
+        if let contrastEnabled = settings["contrastEnabled"] as? Bool {
+            self.settings.contrastEnabled = contrastEnabled
+        }
+        if let exposureEnabled = settings["exposureEnabled"] as? Bool {
+            self.settings.exposureEnabled = exposureEnabled
+        }
+        if let shadowsEnabled = settings["shadowsEnabled"] as? Bool {
+            self.settings.shadowsEnabled = shadowsEnabled
+        }
+        if let highlightsEnabled = settings["highlightsEnabled"] as? Bool {
+            self.settings.highlightsEnabled = highlightsEnabled
+        }
+    }
+    
+    // MARK: - Analysis
+    public func analyze(frame: CVPixelBuffer) -> AIAnalysis? {
+        guard isEnabled else { return nil }
+        
+        let ciImage = CIImage(cvPixelBuffer: frame)
+        var analysisData: [String: Any] = [:]
+        var suggestions: [AISuggestion] = []
+        var totalConfidence: Float = 0.0
+        var analysisCount = 0
+        
+        // Brightness Analysis
+        if settings.brightnessEnabled {
+            let brightnessResult = analyzeBrightness(image: ciImage)
+            analysisData["brightness"] = brightnessResult.toDictionary()
+            totalConfidence += brightnessResult.confidence
+            analysisCount += 1
+            
+            // Generate suggestions based on brightness
+            if brightnessResult.level < 0.3 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Too Dark",
+                        message: "Scene appears underexposed. Try moving to better lighting or increase exposure",
+                        confidence: 1.0 - brightnessResult.level,
+                        priority: .high
+                    )
+                )
+            } else if brightnessResult.level > 0.8 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Too Bright",
+                        message: "Scene appears overexposed. Try reducing exposure or finding shade",
+                        confidence: brightnessResult.level - 0.8,
+                        priority: .high
+                    )
+                )
+            }
+        }
+        
+        // Contrast Analysis
+        if settings.contrastEnabled {
+            let contrastResult = analyzeContrast(image: ciImage)
+            analysisData["contrast"] = contrastResult.toDictionary()
+            totalConfidence += contrastResult.confidence
+            analysisCount += 1
+            
+            if contrastResult.level < 0.3 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Low Contrast",
+                        message: "Image appears flat. Try adjusting position for more dynamic lighting",
+                        confidence: 1.0 - contrastResult.level,
+                        priority: .medium
+                    )
+                )
+            }
+        }
+        
+        // Exposure Analysis
+        if settings.exposureEnabled {
+            let exposureResult = analyzeExposure(image: ciImage)
+            analysisData["exposure"] = exposureResult.toDictionary()
+            totalConfidence += exposureResult.confidence
+            analysisCount += 1
+            
+            if exposureResult.isCorrect {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Good Exposure",
+                        message: "Exposure looks well balanced",
+                        confidence: exposureResult.confidence,
+                        priority: .low,
+                        actionable: false
+                    )
+                )
+            } else {
+                let adjustment = exposureResult.recommendedAdjustment
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Adjust Exposure",
+                        message: "Try \(adjustment > 0 ? "increasing" : "decreasing") exposure by \(String(format: "%.1f", abs(adjustment))) stops",
+                        confidence: 1.0 - exposureResult.confidence,
+                        priority: .medium
+                    )
+                )
+            }
+        }
+        
+        // Shadow/Highlight Analysis
+        if settings.shadowsEnabled || settings.highlightsEnabled {
+            let dynamicRangeResult = analyzeDynamicRange(image: ciImage)
+            analysisData["dynamicRange"] = dynamicRangeResult.toDictionary()
+            totalConfidence += dynamicRangeResult.confidence
+            analysisCount += 1
+            
+            if dynamicRangeResult.shadowsBlocked > 0.1 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Blocked Shadows",
+                        message: "Some shadow details are lost. Try lifting shadows or adding fill light",
+                        confidence: dynamicRangeResult.shadowsBlocked,
+                        priority: .medium
+                    )
+                )
+            }
+            
+            if dynamicRangeResult.highlightsBlown > 0.1 {
+                suggestions.append(
+                    AISuggestion(
+                        type: .lighting,
+                        title: "Blown Highlights",
+                        message: "Some highlight details are lost. Try reducing exposure or using graduated filter",
+                        confidence: dynamicRangeResult.highlightsBlown,
+                        priority: .high
+                    )
+                )
+            }
+        }
+        
+        let averageConfidence = analysisCount > 0 ? totalConfidence / Float(analysisCount) : 0.0
+        
+        return AIAnalysis(
+            type: .lighting,
+            confidence: averageConfidence,
+            data: analysisData,
+            suggestions: suggestions
+        )
+    }
+    
+    // MARK: - Private Analysis Methods
+    
+    private func analyzeBrightness(image: CIImage) -> BrightnessResult {
+        // Calculate average luminance
+        let luminanceImage = image.applyingFilter("CIColorControls", parameters: [
+            "inputSaturation": 0.0 // Convert to grayscale for luminance
+        ])
+        
+        // Use area average to get mean brightness
+        guard let avgFilter = CIFilter(name: "CIAreaAverage") else {
+            return BrightnessResult(level: 0.5, confidence: 0.0, distribution: [])
+        }
+        
+        avgFilter.setValue(luminanceImage, forKey: kCIInputImageKey)
+        avgFilter.setValue(CIVector(cgRect: luminanceImage.extent), forKey: kCIInputExtentKey)
+        
+        guard let avgImage = avgFilter.outputImage else {
+            return BrightnessResult(level: 0.5, confidence: 0.0, distribution: [])
+        }
+        
+        // Get the single pixel result
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        ciContext.render(avgImage, toBitmap: &bitmap, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        
+        let brightness = Float(bitmap[0]) / 255.0
+        let confidence: Float = 0.9 // High confidence for this simple calculation
+        
+        return BrightnessResult(
+            level: brightness,
+            confidence: confidence,
+            distribution: [] // Could be expanded to include histogram data
+        )
+    }
+    
+    private func analyzeContrast(image: CIImage) -> ContrastResult {
+        // Get histogram for contrast calculation
+        guard let histogram = getImageHistogram(image: image) else {
+            return ContrastResult(level: 0.5, confidence: 0.0, histogram: [])
+        }
+        
+        // Calculate contrast using standard deviation of histogram
+        let mean = histogram.reduce(0, +) / Float(histogram.count)
+        let variance = histogram.map { pow($0 - mean, 2) }.reduce(0, +) / Float(histogram.count)
+        let standardDeviation = sqrt(variance)
+        
+        // Normalize to 0-1 range (empirically determined)
+        let contrast = min(standardDeviation / 100.0, 1.0)
+        
+        return ContrastResult(
+            level: contrast,
+            confidence: 0.8,
+            histogram: histogram
+        )
+    }
+    
+    private func analyzeExposure(image: CIImage) -> ExposureResult {
+        // Analyze exposure using histogram peaks and distribution
+        guard let histogram = getImageHistogram(image: image) else {
+            return ExposureResult(isCorrect: true, confidence: 0.0, recommendedAdjustment: 0.0)
+        }
+        
+        // Check for clipping in shadows (first 10% of histogram)
+        let shadowThreshold = histogram.count / 10
+        let shadowClipping = histogram[0..<shadowThreshold].reduce(0, +)
+        
+        // Check for clipping in highlights (last 10% of histogram)
+        let highlightStart = histogram.count - shadowThreshold
+        let highlightClipping = histogram[highlightStart...].reduce(0, +)
+        
+        let totalPixels = histogram.reduce(0, +)
+        let shadowClipPercent = shadowClipping / totalPixels
+        let highlightClipPercent = highlightClipping / totalPixels
+        
+        // Determine if exposure is correct (less than 5% clipping on either end)
+        let isCorrect = shadowClipPercent < 0.05 && highlightClipPercent < 0.05
+        
+        // Calculate recommended adjustment
+        var recommendedAdjustment: Float = 0.0
+        if shadowClipPercent > 0.1 {
+            recommendedAdjustment = 0.5 // Increase exposure
+        } else if highlightClipPercent > 0.1 {
+            recommendedAdjustment = -0.5 // Decrease exposure
+        }
+        
+        let confidence: Float = isCorrect ? 0.9 : 0.7
+        
+        return ExposureResult(
+            isCorrect: isCorrect,
+            confidence: confidence,
+            recommendedAdjustment: recommendedAdjustment
+        )
+    }
+    
+    private func analyzeDynamicRange(image: CIImage) -> DynamicRangeResult {
+        guard let histogram = getImageHistogram(image: image) else {
+            return DynamicRangeResult(confidence: 0.0, shadowsBlocked: 0.0, highlightsBlown: 0.0, dynamicRange: 0.0)
+        }
+        
+        let totalPixels = histogram.reduce(0, +)
+        
+        // Calculate blocked shadows (first 5% of histogram)
+        let shadowEnd = histogram.count / 20
+        let blockedShadows = histogram[0..<shadowEnd].reduce(0, +) / totalPixels
+        
+        // Calculate blown highlights (last 5% of histogram)
+        let highlightStart = histogram.count - shadowEnd
+        let blownHighlights = histogram[highlightStart...].reduce(0, +) / totalPixels
+        
+        // Calculate dynamic range (spread of histogram)
+        let nonZeroStart = histogram.firstIndex { $0 > 0 } ?? 0
+        let nonZeroEnd = histogram.lastIndex { $0 > 0 } ?? histogram.count - 1
+        let dynamicRange = Float(nonZeroEnd - nonZeroStart) / Float(histogram.count)
+        
+        return DynamicRangeResult(
+            confidence: 0.8,
+            shadowsBlocked: blockedShadows,
+            highlightsBlown: blownHighlights,
+            dynamicRange: dynamicRange
+        )
+    }
+    
+    private func getImageHistogram(image: CIImage) -> [Float]? {
+        guard let histogramFilter = histogramFilter else { return nil }
+        
+        // Convert to grayscale for luminance histogram
+        let grayscaleImage = image.applyingFilter("CIColorControls", parameters: [
+            "inputSaturation": 0.0
+        ])
+        
+        histogramFilter.setValue(grayscaleImage, forKey: kCIInputImageKey)
+        histogramFilter.setValue(256, forKey: "inputCount")
+        histogramFilter.setValue(1.0, forKey: "inputScale")
+        
+        guard let histogramImage = histogramFilter.outputImage else { return nil }
+        
+        // Render histogram to bitmap
+        let histogramBounds = CGRect(x: 0, y: 0, width: 256, height: 1)
+        var histogramData = [UInt8](repeating: 0, count: 256 * 4)
+        
+        ciContext.render(histogramImage, toBitmap: &histogramData, rowBytes: 256 * 4, bounds: histogramBounds, format: .RGBA8, colorSpace: nil)
+        
+        // Convert to float array
+        var histogram: [Float] = []
+        for i in stride(from: 0, to: histogramData.count, by: 4) {
+            let value = Float(histogramData[i]) // Red channel contains histogram data
+            histogram.append(value)
+        }
+        
+        return histogram
+    }
+}
+
+// MARK: - Configuration
+public struct LightingSettings {
+    public var brightnessEnabled: Bool
+    public var contrastEnabled: Bool
+    public var exposureEnabled: Bool
+    public var shadowsEnabled: Bool
+    public var highlightsEnabled: Bool
+    
+    public static let `default` = LightingSettings(
+        brightnessEnabled: true,
+        contrastEnabled: true,
+        exposureEnabled: true,
+        shadowsEnabled: true,
+        highlightsEnabled: true
+    )
+}
+
+// MARK: - Analysis Results
+public struct BrightnessResult {
+    public let level: Float // 0.0 (very dark) to 1.0 (very bright)
+    public let confidence: Float
+    public let distribution: [Float] // Histogram data
+    
+    public func toDictionary() -> [String: Any] {
+        return [
+            "level": level,
+            "confidence": confidence,
+            "distribution": distribution
+        ]
+    }
+}
+
+public struct ContrastResult {
+    public let level: Float // 0.0 (no contrast) to 1.0 (high contrast)
+    public let confidence: Float
+    public let histogram: [Float]
+    
+    public func toDictionary() -> [String: Any] {
+        return [
+            "level": level,
+            "confidence": confidence,
+            "histogram": histogram
+        ]
+    }
+}
+
+public struct ExposureResult {
+    public let isCorrect: Bool
+    public let confidence: Float
+    public let recommendedAdjustment: Float // In stops (-2.0 to +2.0)
+    
+    public func toDictionary() -> [String: Any] {
+        return [
+            "isCorrect": isCorrect,
+            "confidence": confidence,
+            "recommendedAdjustment": recommendedAdjustment
+        ]
+    }
+}
+
+public struct DynamicRangeResult {
+    public let confidence: Float
+    public let shadowsBlocked: Float // Percentage of blocked shadows (0.0 to 1.0)
+    public let highlightsBlown: Float // Percentage of blown highlights (0.0 to 1.0)
+    public let dynamicRange: Float // Overall dynamic range (0.0 to 1.0)
+    
+    public func toDictionary() -> [String: Any] {
+        return [
+            "confidence": confidence,
+            "shadowsBlocked": shadowsBlocked,
+            "highlightsBlown": highlightsBlown,
+            "dynamicRange": dynamicRange
+        ]
+    }
+}

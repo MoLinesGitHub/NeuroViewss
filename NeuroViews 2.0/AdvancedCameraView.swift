@@ -259,6 +259,9 @@ struct CameraInterfaceView: View {
                 )
             #endif
             
+            // AI Suggestions Overlay
+            AISuggestionsView(suggestions: cameraManager.aiSuggestions)
+            
             // Camera Controls Overlay
             VStack {
                 // Top Controls
@@ -271,10 +274,22 @@ struct CameraInterfaceView: View {
                     
                     Spacer()
                     
-                    Button(action: { cameraManager.switchCamera() }) {
-                        Image(systemName: "camera.rotate.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
+                    HStack(spacing: 15) {
+                        // AI Toggle
+                        Button(action: { 
+                            cameraManager.isAIAnalysisEnabled.toggle()
+                        }) {
+                            Image(systemName: cameraManager.isAIAnalysisEnabled ? "brain.head.profile.fill" : "brain.head.profile")
+                                .font(.title2)
+                                .foregroundColor(cameraManager.isAIAnalysisEnabled ? .blue : .white)
+                        }
+                        
+                        // Camera Switch
+                        Button(action: { cameraManager.switchCamera() }) {
+                            Image(systemName: "camera.rotate.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                        }
                     }
                     .padding()
                 }

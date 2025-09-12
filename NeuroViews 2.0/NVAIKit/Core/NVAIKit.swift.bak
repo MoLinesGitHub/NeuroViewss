@@ -1,0 +1,104 @@
+//
+//  NVAIKit.swift
+//  NeuroViews 2.0
+//
+//  Created by NeuroViews AI on 12/9/24.
+//  Week 17: AI Integration Foundation
+//
+
+import Foundation
+import CoreImage
+import Vision
+import AVFoundation
+
+// Re-export all public types for easier importing
+@_exported import struct Foundation.Date
+@_exported import struct Foundation.UUID
+
+// MARK: - NVAIKit Main Module
+@available(iOS 15.0, macOS 12.0, *)
+public final class NVAIKit {
+    
+    // MARK: - Singleton
+    public static let shared = NVAIKit()
+    
+    // MARK: - Properties
+    private let analysisQueue = DispatchQueue(label: "com.neuroviews.nvaikit.analysis", qos: .userInitiated)
+    private var activeAnalyzers: [any AIAnalyzer] = []
+    
+    private init() {
+        setupDefaultAnalyzers()
+    }
+    
+    // MARK: - Public Methods
+    
+    /// Analyze a frame from the camera with all available analyzers
+    public func analyzeFrame(
+        _ frame: CVPixelBuffer,
+        completion: @escaping (AIAnalysisResult) -> Void
+    ) {
+        analysisQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            let results = self.activeAnalyzers.compactMap { analyzer in
+                analyzer.analyze(frame: frame)
+            }
+            
+            let combinedResult = AIAnalysisResult(
+                timestamp: Date(),
+                frameAnalyses: results,
+                overallConfidence: self.calculateOverallConfidence(from: results),
+                suggestions: self.generateSuggestions(from: results)
+            )
+            
+            DispatchQueue.main.async {
+                completion(combinedResult)
+            }
+        }
+    }
+    
+    /// Add a custom analyzer to the analysis pipeline
+    public func addAnalyzer(_ analyzer: any AIAnalyzer) {
+        activeAnalyzers.append(analyzer)
+    }
+    
+    /// Remove analyzer by type
+    public func removeAnalyzer<T: AIAnalyzer>(ofType type: T.Type) {
+        activeAnalyzers.removeAll { analyzer in
+            analyzer is T
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupDefaultAnalyzers() {
+        activeAnalyzers = [
+            CompositionAnalyzer(),
+            LightingAnalyzer(),
+            SubjectDetector()
+        ]
+    }
+    
+    private func calculateOverallConfidence(from analyses: [AIAnalysis]) -> Float {
+        guard !analyses.isEmpty else { return 0.0 }
+        
+        let totalConfidence = analyses.reduce(0.0) { $0 + $1.confidence }
+        return totalConfidence / Float(analyses.count)
+    }
+    
+    private func generateSuggestions(from analyses: [AIAnalysis]) -> [AISuggestion] {
+        var suggestions: [AISuggestion] = []
+        
+        for analysis in analyses {
+            suggestions.append(contentsOf: analysis.suggestions)
+        }
+        
+        // Sort by priority and confidence
+        return suggestions.sorted { lhs, rhs in
+            if lhs.priority == rhs.priority {
+                return lhs.confidence > rhs.confidence
+            }
+            return lhs.priority.rawValue > rhs.priority.rawValue
+        }
+    }
+}
