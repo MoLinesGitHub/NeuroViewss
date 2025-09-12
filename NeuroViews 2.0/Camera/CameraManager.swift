@@ -30,16 +30,16 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var zoomFactor: CGFloat = 1.0
     
     // MARK: - Camera Session Components
-    private let captureSession = AVCaptureSession()
-    private var videoDeviceInput: AVCaptureDeviceInput?
-    private var photoOutput = AVCapturePhotoOutput()
-    private var videoOutput = AVCaptureMovieFileOutput()
-    private var previewLayer: AVCaptureVideoPreviewLayer?
+    nonisolated private let captureSession = AVCaptureSession()
+    nonisolated(unsafe) private var videoDeviceInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private var photoOutput = AVCapturePhotoOutput()
+    nonisolated(unsafe) private var videoOutput = AVCaptureMovieFileOutput()
+    nonisolated(unsafe) private var previewLayer: AVCaptureVideoPreviewLayer?
     
     // MARK: - Camera Properties
-    private let sessionQueue = DispatchQueue(label: "camera.session.queue")
-    private var setupResult: SessionSetupResult = .success
-    private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
+    nonisolated private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    nonisolated(unsafe) private var setupResult: SessionSetupResult = .success
+    nonisolated(unsafe) private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
     
     // MARK: - Session Setup Result
     private enum SessionSetupResult {
@@ -131,8 +131,8 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
-    private func setupVideoInput() {
-        guard let videoDevice = defaultVideoDevice() else {
+    nonisolated private func setupVideoInput() {
+        guard let videoDevice = defaultVideoDevice(for: .back) else {
             print("❌ Default video device is unavailable.")
             setupResult = .configurationFailed
             DispatchQueue.main.async {
@@ -168,7 +168,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
-    private func setupPhotoOutput() {
+    nonisolated private func setupPhotoOutput() {
         if captureSession.canAddOutput(photoOutput) {
             captureSession.addOutput(photoOutput)
             
@@ -185,7 +185,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
-    private func setupVideoOutput() {
+    nonisolated private func setupVideoOutput() {
         if captureSession.canAddOutput(videoOutput) {
             captureSession.addOutput(videoOutput)
         } else {
@@ -195,17 +195,17 @@ final class CameraManager: NSObject, ObservableObject {
     }
     
     // MARK: - Device Selection
-    private func defaultVideoDevice() -> AVCaptureDevice? {
+    nonisolated private func defaultVideoDevice(for position: AVCaptureDevice.Position = .back) -> AVCaptureDevice? {
         // Prefer dual camera if available
         if let dualCameraDevice = videoDeviceDiscoverySession?.devices.first(where: { 
-            $0.deviceType == .builtInDualCamera && $0.position == cameraPosition 
+            $0.deviceType == .builtInDualCamera && $0.position == position 
         }) {
             return dualCameraDevice
         }
         
         // Fall back to wide angle camera
         if let wideAngleDevice = videoDeviceDiscoverySession?.devices.first(where: { 
-            $0.deviceType == .builtInWideAngleCamera && $0.position == cameraPosition 
+            $0.deviceType == .builtInWideAngleCamera && $0.position == position 
         }) {
             return wideAngleDevice
         }
@@ -260,10 +260,7 @@ final class CameraManager: NSObject, ObservableObject {
             
             let photoSettings = AVCapturePhotoSettings()
             
-            // Configure photo settings
-            if self.photoOutput.availablePhotoCodecTypes.contains(.hevc) {
-                photoSettings.format = [AVVideoCodecKey: AVVideoCodecType.hevc]
-            }
+            // Configure photo settings (format is read-only, let's configure other settings)
             
             if !photoSettings.__availablePreviewPhotoPixelFormatTypes.isEmpty {
                 photoSettings.previewPhotoFormat = [
@@ -285,10 +282,12 @@ final class CameraManager: NSObject, ObservableObject {
     
     // MARK: - Camera Controls
     func switchCamera() {
+        let currentPosition = cameraPosition // Capture current position on main actor
+        
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             
-            let newPosition: AVCaptureDevice.Position = (self.cameraPosition == .back) ? .front : .back
+            let newPosition: AVCaptureDevice.Position = (currentPosition == .back) ? .front : .back
             
             guard let newVideoDevice = self.videoDeviceDiscoverySession?.devices.first(where: { 
                 $0.position == newPosition 
