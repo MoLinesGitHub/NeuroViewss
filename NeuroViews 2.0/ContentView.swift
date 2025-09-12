@@ -40,7 +40,38 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            Text("Select an item")
+            VStack(spacing: 20) {
+                Text("NeuroViews 2.0")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Text("Advanced AI Camera Interface")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                
+                if #available(iOS 15.0, macOS 12.0, *) {
+                    NavigationLink("Open Advanced Camera") {
+                        AdvancedCameraView()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                } else {
+                    Button("Open Advanced Camera") {
+                        print("🚀 Advanced Camera requires iOS 15.0+")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(true)
+                }
+                
+                Text("Week 13: Advanced UI/UX Implementation")
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+            }
+            .padding()
         }
     }
 

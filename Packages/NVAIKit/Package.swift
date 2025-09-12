@@ -5,25 +5,33 @@ import PackageDescription
 
 let package = Package(
     name: "NVAIKit",
+    platforms: [
+        .iOS(.v15),
+        .macOS(.v12)
+    ],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "NVAIKit",
             targets: ["NVAIKit"]
         ),
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "NVAIKit"
+            name: "NVAIKit",
+            dependencies: [],
+            linkerSettings: [
+                .linkedFramework("AVFoundation", .when(platforms: [.iOS, .macOS])),
+                .linkedFramework("CoreImage", .when(platforms: [.iOS, .macOS])),
+                .linkedFramework("Vision", .when(platforms: [.iOS, .macOS])),
+                .linkedFramework("Photos", .when(platforms: [.iOS, .macOS]))
+            ]
         ),
         .testTarget(
             name: "NVAIKitTests",
             dependencies: ["NVAIKit"],
             exclude: [
                 "IntegrationTests.swift.disabled",
-                "PerformanceTests.swift.disabled", 
+                "PerformanceTests.swift.disabled",
                 "ComponentTests.swift.disabled",
                 "LiveAIProcessorTests.swift.disabled"
             ]

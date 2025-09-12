@@ -2,9 +2,13 @@ import Foundation
 @preconcurrency import AVFoundation
 import SwiftUI
 import Combine
+#if canImport(Photos)
 import Photos
+#endif
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 // MARK: - Advanced Camera View Model
