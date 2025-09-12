@@ -1,0 +1,60 @@
+/*
+  Localizable.strings (English)
+  NeuroViews 2.0
+  
+  Week 14: Accessibility & Localization
+  Created by NeuroViews AI on 12/9/24.
+*/
+
+// MARK: - Navigation
+"navigation.title" = "NeuroViews Camera";
+
+// MARK: - Camera Interface
+"camera.icon.label" = "NeuroViews Camera";
+"advanced.camera.title" = "Advanced Camera Interface";
+"advanced.camera.subtitle" = "AI-Powered Camera with Gesture Recognition";
+"camera.title.combined" = "Advanced Camera Interface. AI-Powered Camera with Gesture Recognition";
+
+// MARK: - Features
+"features.section.label" = "Camera Features";
+
+"feature.ai.title" = "AI Guidance";
+"feature.ai.description" = "Real-time shooting suggestions";
+
+"feature.gestures.title" = "Advanced Gestures";
+"feature.gestures.description" = "Tap, pinch, rotate controls";
+
+"feature.processing.title" = "Smart Processing";
+"feature.processing.description" = "Automatic enhancement";
+
+"feature.grid.title" = "Composition Grid";
+"feature.grid.description" = "Rule of thirds & golden ratio";
+
+// MARK: - Actions
+"start.camera.button" = "Start Camera Session";
+"start.camera.accessibility" = "Start Camera Session";
+"start.camera.hint" = "Double tap to begin advanced camera interface with AI guidance";
+"camera.starting.announcement" = "Camera interface starting";
+
+// MARK: - Status
+"week.status" = "Week 14: Accessibility & Localization ✅";
+"status.accessibility" = "Current status: Week 14, Accessibility and Localization completed";
+
+// MARK: - Main Interface
+"main.title" = "NeuroViews 2.0";
+"main.subtitle" = "Advanced AI Camera Interface";
+"open.camera.button" = "Open Advanced Camera";
+
+// MARK: - General
+"add.item" = "Add Item";
+"error.message" = "An error occurred";
+"loading" = "Loading...";
+"done" = "Done";
+"cancel" = "Cancel";
+"save" = "Save";
+"delete" = "Delete";
+
+// MARK: - Accessibility Descriptions
+"accessibility.main.interface" = "Main application interface with camera access";
+"accessibility.feature.list" = "List of available camera features";
+"accessibility.settings" = "Application settings";

@@ -1,0 +1,60 @@
+/*
+  Localizable.strings (Français)
+  NeuroViews 2.0
+  
+  Week 14: Accessibility & Localization
+  Created by NeuroViews AI on 12/9/24.
+*/
+
+// MARK: - Navigation
+"navigation.title" = "Caméra NeuroViews";
+
+// MARK: - Camera Interface
+"camera.icon.label" = "Caméra NeuroViews";
+"advanced.camera.title" = "Interface Caméra Avancée";
+"advanced.camera.subtitle" = "Caméra IA avec Reconnaissance de Gestes";
+"camera.title.combined" = "Interface Caméra Avancée. Caméra IA avec Reconnaissance de Gestes";
+
+// MARK: - Features
+"features.section.label" = "Fonctionnalités Caméra";
+
+"feature.ai.title" = "Guide IA";
+"feature.ai.description" = "Suggestions de prise de vue en temps réel";
+
+"feature.gestures.title" = "Gestes Avancés";
+"feature.gestures.description" = "Contrôles tactiles, pincement et rotation";
+
+"feature.processing.title" = "Traitement Intelligent";
+"feature.processing.description" = "Amélioration automatique";
+
+"feature.grid.title" = "Grille de Composition";
+"feature.grid.description" = "Règle des tiers et nombre d'or";
+
+// MARK: - Actions
+"start.camera.button" = "Démarrer Session Caméra";
+"start.camera.accessibility" = "Démarrer Session Caméra";
+"start.camera.hint" = "Double-toucher pour commencer l'interface caméra avancée avec guide IA";
+"camera.starting.announcement" = "Démarrage de l'interface caméra";
+
+// MARK: - Status
+"week.status" = "Semaine 14: Accessibilité et Localisation ✅";
+"status.accessibility" = "État actuel: Semaine 14, Accessibilité et Localisation terminée";
+
+// MARK: - Main Interface
+"main.title" = "NeuroViews 2.0";
+"main.subtitle" = "Interface Caméra IA Avancée";
+"open.camera.button" = "Ouvrir Caméra Avancée";
+
+// MARK: - General
+"add.item" = "Ajouter Élément";
+"error.message" = "Une erreur s'est produite";
+"loading" = "Chargement...";
+"done" = "Terminé";
+"cancel" = "Annuler";
+"save" = "Enregistrer";
+"delete" = "Supprimer";
+
+// MARK: - Accessibility Descriptions
+"accessibility.main.interface" = "Interface principale de l'application avec accès caméra";
+"accessibility.feature.list" = "Liste des fonctionnalités caméra disponibles";
+"accessibility.settings" = "Paramètres de l'application";
