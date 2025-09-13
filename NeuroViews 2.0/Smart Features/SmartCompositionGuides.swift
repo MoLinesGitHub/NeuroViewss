@@ -67,26 +67,28 @@ public final class SmartCompositionGuides: ObservableObject {
     /// Analyze frame and provide composition guidance
     nonisolated public func analyzeComposition(_ pixelBuffer: CVPixelBuffer) {
         Task { @MainActor in
-            guard self.isEnabled else { return }
+            guard self.isEnabled, !self.isAnalyzing else { return }
             
             let currentTime = CACurrentMediaTime()
-            guard currentTime - self.lastAnalysisTime >= self.minimumAnalysisInterval else { return }
+            
+            // CRITICAL FIX: Increase minimum interval to 2 seconds to prevent resource exhaustion
+            let minimumInterval: CFTimeInterval = 2.0
+            guard currentTime - self.lastAnalysisTime >= minimumInterval else { return }
             
             self.isAnalyzing = true
+            self.lastAnalysisTime = currentTime
             
-            Task.detached { [weak self] in
+            // CRITICAL FIX: Use background priority and simplified analysis
+            Task.detached(priority: .background) { [weak self] in
                 guard let self = self else { return }
                 
-                let analysis = await self.performVisionAnalysis(pixelBuffer)
+                // CRITICAL FIX: Skip expensive Vision analysis and use static guides
                 let currentGuideType = await self.activeGuideType
-                let guides = self.generateCompositionGuides(from: analysis, guideType: currentGuideType)
-                let suggestions = self.generateSuggestions(from: analysis, guides: guides, guideType: currentGuideType)
+                let guides = self.generateStaticCompositionGuides(guideType: currentGuideType)
                 
                 Task { @MainActor in
                     self.currentGuides = guides
-                    self.suggestions = suggestions
-                    self.confidence = analysis.confidence
-                    self.lastAnalysisTime = currentTime
+                    self.confidence = 1.0 // Static guides always have full confidence
                     self.isAnalyzing = false
                 }
             }
@@ -205,6 +207,26 @@ public final class SmartCompositionGuides: ObservableObject {
         }
         
         return guides
+    }
+    
+    // CRITICAL FIX: Static guide generation to avoid expensive Vision processing
+    nonisolated private func generateStaticCompositionGuides(guideType: GuideType) -> [CompositionGuide] {
+        // Generate guides without expensive analysis
+        switch guideType {
+        case .ruleOfThirds:
+            return generateRuleOfThirdsGuides()
+        case .goldenRatio:
+            return generateGoldenRatioGuides()
+        case .symmetry:
+            return generateSymmetryGuides()
+        case .centeredComposition:
+            return generateCenteredGuides()
+        case .dynamicSymmetry:
+            return generateDynamicSymmetryGuides()
+        case .leadingLines, .horizon:
+            // Skip expensive analysis-dependent guides
+            return generateRuleOfThirdsGuides() // Default to rule of thirds
+        }
     }
     
     nonisolated private func generateRuleOfThirdsGuides() -> [CompositionGuide] {

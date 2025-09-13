@@ -137,11 +137,16 @@ public final class NVAIKit {
     
     private func configurePerformanceManager() {
         var settings = PerformanceManager.PerformanceSettings()
-        settings.targetFrameRate = 30.0
-        settings.maxProcessingTime = 0.033 // 33ms for 30fps
+        // CRITICAL FIX: Conservative settings to prevent iOS termination
+        settings.targetFrameRate = 10.0 // Reduced from 30fps to 10fps
+        settings.maxProcessingTime = 0.1 // Increased from 33ms to 100ms
         settings.enableAdaptiveQuality = true
         settings.enableFrameSkipping = true
+        settings.maxMemoryUsage = 100 * 1024 * 1024 // CRITICAL FIX: Reduced from 200MB to 100MB
         performanceManager.configure(with: settings)
+        
+        // CRITICAL FIX: Start with low quality to prevent immediate resource issues
+        performanceManager.setQualityLevel(.low)
     }
     
     private func getAnalyzersForCurrentPerformance() -> [any AIAnalyzer] {

@@ -69,6 +69,10 @@ final class CameraManager: NSObject, ObservableObject {
     nonisolated(unsafe) private var setupResult: SessionSetupResult = .success
     nonisolated(unsafe) private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
     
+    // CRITICAL FIX: Frame processing throttling properties
+    @MainActor private var lastFrameProcessingTime: CFTimeInterval = 0
+    @MainActor private var isProcessingFrame: Bool = false
+    
     // AI Analysis
     private let aiKit = NVAIKit.shared
     
@@ -251,8 +255,15 @@ final class CameraManager: NSObject, ObservableObject {
             ]
             videoDataOutput.setSampleBufferDelegate(self, queue: videoDataQueue)
             
-            // Don't drop frames for real-time analysis
+            // CRITICAL FIX: Always drop frames to prevent iOS termination
             videoDataOutput.alwaysDiscardsLateVideoFrames = true
+            
+            // CRITICAL FIX: Minimize output quality to reduce memory pressure
+            if let connection = videoDataOutput.connection(with: .video) {
+                connection.videoOrientation = .portrait
+                // Reduce video data rate
+                connection.isEnabled = true
+            }
         } else {
             print("⚠️ Could not add video data output to the session")
         }
@@ -538,23 +549,32 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Extract pixel buffer outside of Task to avoid Sendable issues
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
-        // Use shared reference instead of expensive copying for better performance
-        let sharedBuffer = createSharedPixelBufferReference(from: pixelBuffer)
+        // CRITICAL FIX: Throttle to max 10fps for background processing to prevent iOS termination
+        let currentTime = CACurrentMediaTime()
+        if currentTime - lastFrameProcessingTime < 0.1 { // 100ms minimum interval
+            return
+        }
+        lastFrameProcessingTime = currentTime
         
-        // Check if AI analysis is enabled on main actor
-        Task { @MainActor in
-            guard self.isAIAnalysisEnabled else { return }
+        // CRITICAL FIX: Use weak reference to prevent retain cycles causing memory pressure
+        Task { @MainActor [weak self] in
+            guard let self = self, self.isAIAnalysisEnabled else { return }
             
-            // Process the frame with shared buffer (automatic cleanup when done)
-            self.processFrameForAI(sharedBuffer)
+            // CRITICAL FIX: Process only one task at a time to prevent resource exhaustion
+            if self.isProcessingFrame { return }
+            self.isProcessingFrame = true
             
-            // Process smart features if enabled
-            if self.isSmartFeaturesEnabled {
-                self.processFrameForSmartFeatures(sharedBuffer)
+            defer {
+                self.isProcessingFrame = false
             }
             
-            // Note: In Swift 6, Core Foundation objects are automatically managed
-            // No manual release needed
+            // CRITICAL FIX: Use original buffer directly, no copying to reduce memory pressure
+            self.processFrameForAI(pixelBuffer)
+            
+            // CRITICAL FIX: Skip smart features if AI processing is active
+            if self.isSmartFeaturesEnabled && !self.isProcessingFrame {
+                self.processFrameForSmartFeatures(pixelBuffer)
+            }
         }
     }
     

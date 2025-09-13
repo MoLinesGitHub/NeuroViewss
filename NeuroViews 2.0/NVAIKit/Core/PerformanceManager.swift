@@ -34,15 +34,15 @@ public final class PerformanceManager {
     private var targetFrameRate: Double = 30.0
     private var maxProcessingTime: TimeInterval = 0.033 // 33ms for 30fps
     
-    // Resource management
-    private let maxConcurrentAnalysis = 2
+    // CRITICAL FIX: Drastically reduced resource management to prevent iOS termination
+    private let maxConcurrentAnalysis = 1 // Reduced from 2 to 1
     private var activeAnalysisCount = 0
     private let activeAnalysisQueue = DispatchQueue(label: "com.neuroviews.analysis.counter")
     
     // Frame management
-    private let frameBuffer = FrameBuffer(capacity: 5)
+    private let frameBuffer = FrameBuffer(capacity: 2) // Reduced from 5 to 2
     private var lastProcessedFrameTime: CFTimeInterval = 0
-    private let minFrameInterval: TimeInterval = 1.0 / 30.0 // 30fps max
+    private let minFrameInterval: TimeInterval = 1.0 / 10.0 // CRITICAL FIX: 10fps max instead of 30fps
     
     public enum QualityLevel: String, CaseIterable {
         case low = "low"
@@ -70,10 +70,10 @@ public final class PerformanceManager {
         
         public var analysisInterval: TimeInterval {
             switch self {
-            case .low: return 1.0 / 10.0 // 10fps analysis
-            case .medium: return 1.0 / 15.0 // 15fps analysis
-            case .high: return 1.0 / 20.0 // 20fps analysis
-            case .ultra: return 1.0 / 30.0 // 30fps analysis
+            case .low: return 3.0 // CRITICAL FIX: 3 seconds for low quality
+            case .medium: return 2.0 // CRITICAL FIX: 2 seconds for medium quality  
+            case .high: return 1.0 // CRITICAL FIX: 1 second for high quality
+            case .ultra: return 0.5 // CRITICAL FIX: 0.5 seconds for ultra quality
             }
         }
     }

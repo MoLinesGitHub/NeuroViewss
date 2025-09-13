@@ -87,37 +87,37 @@ public final class SmartAutoFocus: ObservableObject {
     /// Analyze frame and provide AI-guided focus suggestions
     nonisolated public func analyzeForFocus(_ pixelBuffer: CVPixelBuffer) {
         Task { @MainActor in
-            guard self.isEnabled else { return }
+            guard self.isEnabled, !self.isAnalyzing else { return }
             
             let currentTime = CACurrentMediaTime()
             
-            // Calculate adaptive interval based on scene stability
+            // CRITICAL FIX: Minimum 1 second interval to prevent iOS termination
+            let minimumInterval: CFTimeInterval = 1.0
+            guard currentTime - self.lastAnalysisTime >= minimumInterval else { return }
+            
+            // CRITICAL FIX: Lightweight hash check to avoid expensive operations
             let frameHash = await self.calculateFrameHash(pixelBuffer)
             let sceneChanged = await self.updateSceneStability(frameHash: frameHash)
             
-            // Use adaptive interval - analyze less frequently for stable scenes
-            let currentInterval = sceneChanged ? 0.2 : min(2.0, self.adaptiveAnalysisInterval)
-            guard currentTime - self.lastAnalysisTime >= currentInterval else { return }
+            // CRITICAL FIX: Only process if scene changed significantly or it's been 3+ seconds
+            let timeSinceLastAnalysis = currentTime - self.lastAnalysisTime
+            guard sceneChanged || timeSinceLastAnalysis >= 3.0 else { return }
             
             self.isAnalyzing = true
+            self.lastAnalysisTime = currentTime
             
-            Task.detached { [weak self] in
+            // CRITICAL FIX: Use lower priority queue to prevent blocking main operations
+            Task.detached(priority: .background) { [weak self] in
                 guard let self = self else { return }
                 
-                let focusAnalysis = await self.performFocusAnalysis(pixelBuffer)
-                let subjects = await self.detectSubjects(pixelBuffer)
-                let suggestions = self.generateFocusSuggestions(analysis: focusAnalysis, subjects: subjects)
-                let optimalFocusPoint = self.calculateOptimalFocusPoint(subjects: subjects, analysis: focusAnalysis)
+                // CRITICAL FIX: Simplified analysis to reduce resource usage
+                let subjects = await self.detectSubjectsLightweight(pixelBuffer)
+                let optimalFocusPoint = self.calculateOptimalFocusPoint(subjects: subjects, analysis: nil)
                 
                 Task { @MainActor in
-                    self.updateFocusResults(
-                        analysis: focusAnalysis,
-                        subjects: subjects,
-                        suggestions: suggestions,
-                        optimalPoint: optimalFocusPoint
-                    )
-                    
-                    self.lastAnalysisTime = currentTime
+                    // CRITICAL FIX: Only update essential properties
+                    self.trackingSubjects = subjects
+                    self.currentFocusPoint = optimalFocusPoint
                     self.isAnalyzing = false
                 }
             }
@@ -267,6 +267,34 @@ public final class SmartAutoFocus: ObservableObject {
         return subjects.sorted { $0.confidence > $1.confidence }
     }
     
+    // CRITICAL FIX: Lightweight subject detection for performance
+    private func detectSubjectsLightweight(_ pixelBuffer: CVPixelBuffer) async -> [DetectedSubject] {
+        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+        var subjects: [DetectedSubject] = []
+        
+        do {
+            // CRITICAL FIX: Only detect faces (most important) to reduce processing load
+            if let faceRequest = faceDetectionRequest {
+                try imageRequestHandler.perform([faceRequest])
+                if let faces = faceRequest.results?.prefix(2) { // Limit to 2 faces max
+                    for face in faces {
+                        subjects.append(DetectedSubject(
+                            type: .face,
+                            boundingBox: face.boundingBox,
+                            confidence: face.confidence,
+                            isPrimary: subjects.isEmpty,
+                            trackingID: UUID()
+                        ))
+                    }
+                }
+            }
+        } catch {
+            print("Lightweight subject detection error: \(error)")
+        }
+        
+        return subjects
+    }
+    
     nonisolated private func calculateBoundingBox(from points: [VNHumanBodyPoseObservation.JointName: VNRecognizedPoint]) -> CGRect {
         guard !points.isEmpty else { return .zero }
         
@@ -337,7 +365,7 @@ public final class SmartAutoFocus: ObservableObject {
         return suggestions
     }
     
-    nonisolated private func calculateOptimalFocusPoint(subjects: [DetectedSubject], analysis: FocusAnalysis) -> CGPoint {
+    nonisolated private func calculateOptimalFocusPoint(subjects: [DetectedSubject], analysis: FocusAnalysis?) -> CGPoint {
         // Priority 1: Primary subject (faces)
         if let primaryFace = subjects.first(where: { $0.type == .face && $0.isPrimary }) {
             return primaryFace.boundingBox.center
@@ -409,7 +437,7 @@ public final class SmartAutoFocus: ObservableObject {
             
             // Slower analysis for stable scenes
             if consecutiveStableFrames > 10 {
-                adaptiveAnalysisInterval = min(2.0, 0.5 + Float(consecutiveStableFrames) * 0.1)
+                adaptiveAnalysisInterval = min(2.0, 0.5 + Double(consecutiveStableFrames) * 0.1)
             }
         }
         
