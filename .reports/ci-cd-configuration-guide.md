@@ -25,7 +25,7 @@
 ### Coverage Tracking (NUEVO ✨)
 
 ```yaml
-MIN_COVERAGE: 4.5      # Límite mínimo (Baseline: 4.96%)
+MIN_COVERAGE: 5.0      # Límite mínimo (Actualizado: 5.41% - 24 Ene 2025)
 TARGET_COVERAGE: 20.0  # Meta Semana 1-2
 FINAL_COVERAGE: 60.0   # Meta Semana 4
 ```
@@ -135,15 +135,16 @@ A medida que añades tests, incrementa `MIN_COVERAGE` para evitar regresiones:
 
 ```yaml
 # Semana 1 (24 Ene 2025)
-MIN_COVERAGE: 4.5   # Baseline: 4.96%
+MIN_COVERAGE: 4.5   # Baseline inicial: 4.96%
+MIN_COVERAGE: 5.0   # ✅ ACTUALIZADO después de CameraManager tests: 5.41%
 
-# Semana 2 (después de SmartAutoFocus + ExposureAnalyzer tests completos)
-MIN_COVERAGE: 8.0   # Target: 40% SmartAutoFocus, 35% ExposureAnalyzer
+# Semana 2 (con mock infrastructure)
+MIN_COVERAGE: 10.0  # Target: mocks básicos para análisis
 
-# Semana 3 (después de CameraManager tests)
-MIN_COVERAGE: 15.0  # Target: +30% CameraManager
+# Semana 3 (tests de integración con mocks)
+MIN_COVERAGE: 30.0  # Target: core methods con mocks completos
 
-# Semana 4 (tests comprehensivos)
+# Semana 4 (tests end-to-end)
 MIN_COVERAGE: 50.0  # Target: 60% final goal approach
 ```
 
@@ -295,7 +296,8 @@ xcodebuild test -scheme "NeuroViews 2.0" -enableCodeCoverage YES
 
 **Configurado por:** Claude Code
 **Baseline establecido:** 4.96% (24 Ene 2025)
-**Límite inicial:** 4.5%
+**Coverage actual:** 5.41% (24 Ene 2025 - con CameraManager tests)
+**Límite actual:** 5.0%
 **Meta final:** 60% (Semana 4)
 
 **Estado:** ✅ Ready for production
