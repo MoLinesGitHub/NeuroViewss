@@ -16,7 +16,7 @@ env:
   TARGET_WARNINGS: 40   # Meta después de Opción 1 (Actor Isolation)
   FINAL_WARNINGS: 0     # Meta final
   # COVERAGE LIMITS - Incrementar estos valores a medida que se añaden tests
-  MIN_COVERAGE: 5.0     # Límite mínimo (Actualizado: 5.41% - 24 Ene 2025 con CameraManager tests)
+  MIN_COVERAGE: 7.5     # Límite mínimo (Actualizado: 7.81% - 24 Ene 2025 con Mock Infrastructure)
   TARGET_COVERAGE: 20.0 # Meta Semana 1-2 (Tests básicos)
   FINAL_COVERAGE: 60.0  # Meta final (Semana 4)
 

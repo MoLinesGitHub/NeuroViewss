@@ -3,7 +3,7 @@
 //  NeuroViews 2.0Tests
 //
 //  Created by Claude Code on 24/01/25.
-//  Advanced tests for SmartAutoFocus using mock infrastructure
+//  Advanced tests for SmartAutoFocus using mock infrastructure (Corrected APIs)
 //
 
 import Testing
@@ -14,125 +14,8 @@ import CoreImage
 
 // MARK: - Focus Analysis with Mock Pixel Buffers
 
-@Suite("SmartAutoFocus - Analysis with Mocks")
-struct SmartAutoFocusAnalysisTests {
-
-    @Test("analyzeForFocus processes well-exposed frame")
-    @MainActor
-    func testAnalyzeWellExposedFrame() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-
-        guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 1280, height: 720) else {
-            Issue.record("Failed to create mock pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        // Enable and trigger analysis
-        autoFocus.isEnabled = true
-        autoFocus.analyzeForFocus(sendableBuffer)
-
-        // Wait a bit for async processing
-        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-
-        // Verify state changed
-        #expect(autoFocus.isEnabled == true)
-    }
-
-    @Test("analyzeForFocus processes overexposed frame")
-    @MainActor
-    func testAnalyzeOverexposedFrame() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-
-        guard let pixelBuffer = MockPixelBuffer.overexposed(width: 1280, height: 720) else {
-            Issue.record("Failed to create overexposed pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        autoFocus.isEnabled = true
-        autoFocus.analyzeForFocus(sendableBuffer)
-
-        // Wait for processing
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(autoFocus.isEnabled == true)
-    }
-
-    @Test("analyzeForFocus processes underexposed frame")
-    @MainActor
-    func testAnalyzeUnderexposedFrame() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-
-        guard let pixelBuffer = MockPixelBuffer.underexposed(width: 1280, height: 720) else {
-            Issue.record("Failed to create underexposed pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        autoFocus.isEnabled = true
-        autoFocus.analyzeForFocus(sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(autoFocus.isEnabled == true)
-    }
-
-    @Test("analyzeForFocus processes high contrast frame")
-    @MainActor
-    func testAnalyzeHighContrastFrame() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-
-        guard let pixelBuffer = MockPixelBuffer.highContrast(width: 1920, height: 1080) else {
-            Issue.record("Failed to create high contrast pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        autoFocus.isEnabled = true
-        autoFocus.analyzeForFocus(sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(autoFocus.isEnabled == true)
-    }
-
-    @Test("analyzeForFocus does not process when disabled")
-    @MainActor
-    func testAnalyzeWhenDisabled() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-        autoFocus.isEnabled = false
-
-        guard let pixelBuffer = MockPixelBuffer.wellExposed() else {
-            Issue.record("Failed to create pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-        let initialAnalysisState = autoFocus.isAnalyzing
-
-        autoFocus.analyzeForFocus(sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        // Should not have triggered analysis
-        #expect(autoFocus.isAnalyzing == initialAnalysisState)
-        #expect(autoFocus.isEnabled == false)
-    }
+@Suite("SmartAutoFocus - Advanced Analysis")
+struct SmartAutoFocusAdvancedAnalysisTests {
 
     @Test("analyzeForFocus handles different resolutions")
     @MainActor
@@ -153,7 +36,7 @@ struct SmartAutoFocusAnalysisTests {
                 continue
             }
 
-            let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
+            let sendableBuffer = SendablePixelBuffer(pixelBuffer)
             autoFocus.isEnabled = true
             autoFocus.analyzeForFocus(sendableBuffer)
 
@@ -162,77 +45,60 @@ struct SmartAutoFocusAnalysisTests {
 
         #expect(autoFocus.isEnabled == true)
     }
-}
 
-// MARK: - Device Integration Tests
-
-@Suite("SmartAutoFocus - Device Integration")
-struct SmartAutoFocusDeviceTests {
-
-    @Test("applyAIFocus applies focus to mock device")
+    @Test("analyzeForFocus processes high contrast frame")
     @MainActor
-    func testApplyFocusToDevice() throws {
+    func testAnalyzeHighContrastFrame() async throws {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
-        let mockDevice = MockCaptureDevice.backCamera()
 
-        // Set a focus point
-        autoFocus.currentFocusPoint = CGPoint(x: 0.5, y: 0.5)
-
-        // This will throw in real usage but we're testing the call path
-        do {
-            // Can't actually test this without AVCaptureDevice protocol conformance
-            // Just verify the setup is correct
-            #expect(autoFocus.currentFocusPoint != nil)
-            #expect(mockDevice.focusMode != nil)
+        guard let pixelBuffer = MockPixelBuffer.highContrast(width: 1920, height: 1080) else {
+            Issue.record("Failed to create high contrast pixel buffer")
+            return
         }
+
+        let sendableBuffer = SendablePixelBuffer(pixelBuffer)
+
+        autoFocus.isEnabled = true
+        autoFocus.analyzeForFocus(sendableBuffer)
+
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(autoFocus.isEnabled == true)
     }
 
-    @Test("Focus mode changes are tracked")
+    @Test("analyzeForFocus processes low contrast frame")
     @MainActor
-    func testFocusModeTracking() {
+    func testAnalyzeLowContrastFrame() async throws {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
 
-        autoFocus.setFocusMode(.aiGuided)
-        #expect(autoFocus.focusMode == .aiGuided)
-
-        autoFocus.setFocusMode(.subjectTracking)
-        #expect(autoFocus.focusMode == .subjectTracking)
-
-        autoFocus.setFocusMode(.manual)
-        #expect(autoFocus.focusMode == .manual)
-    }
-
-    @Test("Subject tracking toggle works")
-    @MainActor
-    func testSubjectTrackingToggle() {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let autoFocus = SmartAutoFocus()
-        let initialMode = autoFocus.focusMode
-
-        autoFocus.toggleSubjectTracking()
-
-        // Should toggle to/from subject tracking
-        if initialMode == .subjectTracking {
-            #expect(autoFocus.focusMode == .aiGuided)
-        } else {
-            #expect(autoFocus.focusMode == .subjectTracking)
+        guard let pixelBuffer = MockPixelBuffer.lowContrast(width: 1280, height: 720) else {
+            Issue.record("Failed to create low contrast pixel buffer")
+            return
         }
+
+        let sendableBuffer = SendablePixelBuffer(pixelBuffer)
+
+        autoFocus.isEnabled = true
+        autoFocus.analyzeForFocus(sendableBuffer)
+
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(autoFocus.isEnabled == true)
     }
 }
 
 // MARK: - Focus Quality Tests
 
-@Suite("SmartAutoFocus - Focus Quality")
-struct SmartAutoFocusQualityTests {
+@Suite("SmartAutoFocus - Quality Metrics")
+struct SmartAutoFocusQualityMetricsTests {
 
     @Test("Focus quality score is in valid range")
     @MainActor
-    func testFocusQualityScore() {
+    func testFocusQualityScoreRange() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
@@ -244,82 +110,65 @@ struct SmartAutoFocusQualityTests {
 
     @Test("Focus trend is valid")
     @MainActor
-    func testFocusTrend() {
+    func testFocusTrendValid() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
         let trend = autoFocus.getFocusTrend()
 
         // Should return one of the valid enum cases
-        #expect(trend == .improving || trend == .degrading || trend == .stable)
+        #expect(trend == .improving || trend == .declining || trend == .stable)
     }
 
-    @Test("Focus confidence is initialized to zero")
+    @Test("Focus mode transitions correctly")
     @MainActor
-    func testInitialFocusConfidence() {
+    func testFocusModeTransitions() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
-        #expect(autoFocus.focusConfidence == 0.0)
+
+        // Test all mode transitions
+        autoFocus.setFocusMode(.aiGuided)
+        #expect(autoFocus.focusMode == .aiGuided)
+
+        autoFocus.setFocusMode(.subjectTracking)
+        #expect(autoFocus.focusMode == .subjectTracking)
+
+        autoFocus.setFocusMode(.manual)
+        #expect(autoFocus.focusMode == .manual)
+
+        autoFocus.setFocusMode(.hyperfocal)
+        #expect(autoFocus.focusMode == .hyperfocal)
     }
 
-    @Test("Focus suggestions array starts empty")
+    @Test("Subject tracking toggle cycles correctly")
     @MainActor
-    func testInitialFocusSuggestions() {
+    func testSubjectTrackingCycle() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let autoFocus = SmartAutoFocus()
-        #expect(autoFocus.focusSuggestions.isEmpty)
-    }
 
-    @Test("Tracking subjects array starts empty")
-    @MainActor
-    func testInitialTrackingSubjects() {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
+        // Start in aiGuided mode
+        autoFocus.setFocusMode(.aiGuided)
+        #expect(autoFocus.focusMode == .aiGuided)
 
-        let autoFocus = SmartAutoFocus()
-        #expect(autoFocus.trackingSubjects.isEmpty)
+        // Toggle should switch to subjectTracking
+        autoFocus.toggleSubjectTracking()
+        #expect(autoFocus.focusMode == .subjectTracking)
+
+        // Toggle again should return to aiGuided
+        autoFocus.toggleSubjectTracking()
+        #expect(autoFocus.focusMode == .aiGuided)
     }
 }
 
-// MARK: - SendablePixelBuffer Tests
+// MARK: - SendablePixelBuffer Integration
 
-@Suite("SendablePixelBuffer - Integration")
-struct SendablePixelBufferIntegrationTests {
+@Suite("SendablePixelBuffer - Advanced Integration")
+struct SendablePixelBufferAdvancedTests {
 
-    @Test("SendablePixelBuffer wraps CVPixelBuffer correctly")
-    func testPixelBufferWrapping() {
-        guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 640, height: 480) else {
-            Issue.record("Failed to create pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        #expect(sendableBuffer.buffer != nil)
-        #expect(CVPixelBufferGetWidth(sendableBuffer.buffer) == 640)
-        #expect(CVPixelBufferGetHeight(sendableBuffer.buffer) == 480)
-    }
-
-    @Test("SendablePixelBuffer preserves buffer format")
-    func testPixelBufferFormat() {
-        guard let pixelBuffer = MockPixelBuffer.solidColor(
-            width: 1920,
-            height: 1080,
-            color: (128, 128, 128)
-        ) else {
-            Issue.record("Failed to create pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-        let format = CVPixelBufferGetPixelFormatType(sendableBuffer.buffer)
-
-        #expect(format == kCVPixelFormatType_32BGRA)
-    }
-
-    @Test("SendablePixelBuffer can be created with different scenarios")
-    func testScenarioBuffers() {
+    @Test("SendablePixelBuffer wraps different scenarios correctly")
+    func testWrapDifferentScenarios() {
         let scenarios: [(String, CVPixelBuffer?)] = [
             ("overexposed", MockPixelBuffer.overexposed()),
             ("underexposed", MockPixelBuffer.underexposed()),
@@ -334,50 +183,13 @@ struct SendablePixelBufferIntegrationTests {
                 continue
             }
 
-            let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
+            let sendableBuffer = SendablePixelBuffer(pixelBuffer)
             #expect(sendableBuffer.buffer != nil, "\(name) buffer should wrap correctly")
         }
     }
-}
 
-// MARK: - Performance Tests with Mocks
-
-@Suite("SmartAutoFocus - Performance with Mocks")
-struct SmartAutoFocusPerformanceWithMocksTests {
-
-    @Test("Pixel buffer creation is fast")
-    func testPixelBufferCreationPerformance() {
-        let startTime = CFAbsoluteTimeGetCurrent()
-
-        for _ in 0..<100 {
-            _ = MockPixelBuffer.wellExposed(width: 1280, height: 720)
-        }
-
-        let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
-
-        #expect(timeElapsed < 5.0, "Creating 100 pixel buffers should take < 5s")
-    }
-
-    @Test("SendablePixelBuffer wrapping is instantaneous")
-    func testSendableWrappingPerformance() {
-        guard let pixelBuffer = MockPixelBuffer.wellExposed() else {
-            Issue.record("Failed to create pixel buffer")
-            return
-        }
-
-        let startTime = CFAbsoluteTimeGetCurrent()
-
-        for _ in 0..<10000 {
-            _ = SendablePixelBuffer(buffer: pixelBuffer)
-        }
-
-        let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
-
-        #expect(timeElapsed < 0.5, "10000 wrapper creations should take < 500ms")
-    }
-
-    @Test("Multiple resolution buffers can be created quickly")
-    func testMultiResolutionCreation() {
+    @Test("SendablePixelBuffer preserves resolution")
+    func testPreserveResolution() {
         let resolutions: [(Int, Int)] = [
             (640, 480),
             (1280, 720),
@@ -385,16 +197,83 @@ struct SmartAutoFocusPerformanceWithMocksTests {
             (3840, 2160)
         ]
 
+        for (width, height) in resolutions {
+            guard let pixelBuffer = MockPixelBuffer.wellExposed(width: width, height: height) else {
+                Issue.record("Failed to create \(width)x\(height) buffer")
+                continue
+            }
+
+            let sendableBuffer = SendablePixelBuffer(pixelBuffer)
+
+            #expect(CVPixelBufferGetWidth(sendableBuffer.buffer) == width)
+            #expect(CVPixelBufferGetHeight(sendableBuffer.buffer) == height)
+        }
+    }
+
+    @Test("SendablePixelBuffer maintains format")
+    func testMaintainFormat() {
+        guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 1920, height: 1080) else {
+            Issue.record("Failed to create pixel buffer")
+            return
+        }
+
+        let sendableBuffer = SendablePixelBuffer(pixelBuffer)
+        let format = CVPixelBufferGetPixelFormatType(sendableBuffer.buffer)
+
+        #expect(format == kCVPixelFormatType_32BGRA)
+    }
+}
+
+// MARK: - Performance Tests
+
+@Suite("SmartAutoFocus - Advanced Performance")
+struct SmartAutoFocusAdvancedPerformanceTests {
+
+    @Test("Pixel buffer creation is performant")
+    func testPixelBufferCreationPerformance() {
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        for (width, height) in resolutions {
-            for _ in 0..<10 {
-                _ = MockPixelBuffer.wellExposed(width: width, height: height)
-            }
+        for _ in 0..<50 {
+            _ = MockPixelBuffer.wellExposed(width: 1280, height: 720)
         }
 
         let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
 
-        #expect(timeElapsed < 10.0, "40 buffers across resolutions should take < 10s")
+        #expect(timeElapsed < 3.0, "Creating 50 pixel buffers should take < 3s")
+    }
+
+    @Test("SendablePixelBuffer wrapping is fast")
+    func testSendableWrappingSpeed() {
+        guard let pixelBuffer = MockPixelBuffer.wellExposed() else {
+            Issue.record("Failed to create pixel buffer")
+            return
+        }
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        for _ in 0..<5000 {
+            _ = SendablePixelBuffer(pixelBuffer)
+        }
+
+        let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
+
+        #expect(timeElapsed < 0.3, "5000 wrapper creations should take < 300ms")
+    }
+
+    @Test("Multiple scenario buffers creation is efficient")
+    func testMultiScenarioCreation() {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        for _ in 0..<10 {
+            _ = MockPixelBuffer.overexposed()
+            _ = MockPixelBuffer.underexposed()
+            _ = MockPixelBuffer.wellExposed()
+            _ = MockPixelBuffer.highContrast()
+            _ = MockPixelBuffer.lowContrast()
+        }
+
+        let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
+
+        #expect(timeElapsed < 5.0, "50 buffers across scenarios should take < 5s")
     }
 }

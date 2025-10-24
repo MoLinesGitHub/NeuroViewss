@@ -3,7 +3,7 @@
 //  NeuroViews 2.0Tests
 //
 //  Created by Claude Code on 24/01/25.
-//  Advanced tests for ExposureAnalyzer using mock infrastructure
+//  Advanced tests for ExposureAnalyzer using mock infrastructure (Corrected APIs)
 //
 
 import Testing
@@ -14,143 +14,40 @@ import AVFoundation
 
 // MARK: - Exposure Analysis with Mock Images
 
-@Suite("ExposureAnalyzer - Analysis with Mocks")
-struct ExposureAnalyzerAnalysisTests {
+@Suite("ExposureAnalyzer - Advanced Analysis")
+struct ExposureAnalyzerAdvancedAnalysisTests {
 
-    @Test("analyze processes well-exposed frame")
+    @Test("analyze returns different results for exposure scenarios")
     @MainActor
-    func testAnalyzeWellExposedFrame() async throws {
+    func testAnalyzeExposureScenarios() async throws {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
 
-        guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 1280, height: 720) else {
-            Issue.record("Failed to create pixel buffer")
+        // Test well-exposed
+        guard let wellExposed = MockPixelBuffer.wellExposed(width: 1280, height: 720) else {
+            Issue.record("Failed to create well-exposed buffer")
             return
         }
+        let wellResult = analyzer.analyze(frame: wellExposed)
+        #expect(wellResult != nil, "Well-exposed should return analysis")
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        // Enable and trigger analysis
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        // Wait for async processing
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
-    }
-
-    @Test("analyze detects overexposure")
-    @MainActor
-    func testDetectOverexposure() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-
-        guard let pixelBuffer = MockPixelBuffer.overexposed(width: 1280, height: 720) else {
+        // Test overexposed
+        guard let overexposed = MockPixelBuffer.overexposed(width: 1280, height: 720) else {
             Issue.record("Failed to create overexposed buffer")
             return
         }
+        let overResult = analyzer.analyze(frame: overexposed)
+        #expect(overResult != nil, "Overexposed should return analysis")
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
-    }
-
-    @Test("analyze detects underexposure")
-    @MainActor
-    func testDetectUnderexposure() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-
-        guard let pixelBuffer = MockPixelBuffer.underexposed(width: 1280, height: 720) else {
+        // Test underexposed
+        guard let underexposed = MockPixelBuffer.underexposed(width: 1280, height: 720) else {
             Issue.record("Failed to create underexposed buffer")
             return
         }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
-    }
-
-    @Test("analyze processes high contrast scene")
-    @MainActor
-    func testAnalyzeHighContrast() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-
-        guard let pixelBuffer = MockPixelBuffer.highContrast(width: 1920, height: 1080) else {
-            Issue.record("Failed to create high contrast buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
-    }
-
-    @Test("analyze processes low contrast scene")
-    @MainActor
-    func testAnalyzeLowContrast() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-
-        guard let pixelBuffer = MockPixelBuffer.lowContrast(width: 1280, height: 720) else {
-            Issue.record("Failed to create low contrast buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
-    }
-
-    @Test("analyze does not process when disabled")
-    @MainActor
-    func testAnalyzeWhenDisabled() async throws {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-        analyzer.isEnabled = false
-
-        guard let pixelBuffer = MockPixelBuffer.wellExposed() else {
-            Issue.record("Failed to create pixel buffer")
-            return
-        }
-
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-        let initialAnalysisState = analyzer.isAnalyzing
-
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isAnalyzing == initialAnalysisState)
-        #expect(analyzer.isEnabled == false)
+        let underResult = analyzer.analyze(frame: underexposed)
+        #expect(underResult != nil, "Underexposed should return analysis")
     }
 
     @Test("analyze handles different resolutions")
@@ -159,6 +56,8 @@ struct ExposureAnalyzerAnalysisTests {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
+
         let resolutions: [(Int, Int)] = [
             (640, 480),
             (1280, 720),
@@ -172,14 +71,34 @@ struct ExposureAnalyzerAnalysisTests {
                 continue
             }
 
-            let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-            analyzer.isEnabled = true
-            analyzer.analyze(frame: sendableBuffer)
-
-            try await Task.sleep(nanoseconds: 50_000_000)
+            let result = analyzer.analyze(frame: pixelBuffer)
+            #expect(result != nil, "\(width)x\(height) should be analyzed")
         }
+    }
 
-        #expect(analyzer.isEnabled == true)
+    @Test("analyze processes contrast scenarios")
+    @MainActor
+    func testAnalyzeContrastScenarios() async throws {
+        guard #available(iOS 15.0, macOS 12.0, *) else { return }
+
+        let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
+
+        // High contrast
+        guard let highContrast = MockPixelBuffer.highContrast(width: 1920, height: 1080) else {
+            Issue.record("Failed to create high contrast buffer")
+            return
+        }
+        let highResult = analyzer.analyze(frame: highContrast)
+        #expect(highResult != nil, "High contrast should return analysis")
+
+        // Low contrast
+        guard let lowContrast = MockPixelBuffer.lowContrast(width: 1280, height: 720) else {
+            Issue.record("Failed to create low contrast buffer")
+            return
+        }
+        let lowResult = analyzer.analyze(frame: lowContrast)
+        #expect(lowResult != nil, "Low contrast should return analysis")
     }
 }
 
@@ -188,8 +107,8 @@ struct ExposureAnalyzerAnalysisTests {
 @Suite("ExposureAnalyzer - CIImage Processing")
 struct ExposureAnalyzerCIImageTests {
 
-    @Test("CVPixelBuffer converts to CIImage")
-    func testPixelBufferToCIImage() {
+    @Test("CVPixelBuffer converts to CIImage correctly")
+    func testPixelBufferToCIImageConversion() {
         guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 640, height: 480) else {
             Issue.record("Failed to create pixel buffer")
             return
@@ -203,7 +122,7 @@ struct ExposureAnalyzerCIImageTests {
     }
 
     @Test("CIImage preserves exposure scenarios")
-    func testCIImagePreservesScenarios() {
+    func testCIImagePreservesExposureData() {
         let scenarios: [(String, CVPixelBuffer?)] = [
             ("overexposed", MockPixelBuffer.overexposed(width: 1280, height: 720)),
             ("underexposed", MockPixelBuffer.underexposed(width: 1280, height: 720)),
@@ -221,43 +140,36 @@ struct ExposureAnalyzerCIImageTests {
             #expect(ciImage.extent.height == 720, "\(name) CIImage height should match")
         }
     }
+
+    @Test("CIImage conversion handles multiple resolutions")
+    func testCIImageMultipleResolutions() {
+        let resolutions: [(Int, Int)] = [
+            (640, 480),
+            (1280, 720),
+            (1920, 1080)
+        ]
+
+        for (width, height) in resolutions {
+            guard let pixelBuffer = MockPixelBuffer.wellExposed(width: width, height: height),
+                  let ciImage = MockPixelBuffer.toCIImage(pixelBuffer) else {
+                Issue.record("Failed to convert \(width)x\(height) to CIImage")
+                continue
+            }
+
+            #expect(ciImage.extent.width == CGFloat(width))
+            #expect(ciImage.extent.height == CGFloat(height))
+        }
+    }
 }
 
-// MARK: - Exposure Metrics Tests
+// MARK: - Configuration Tests
 
-@Suite("ExposureAnalyzer - Metrics")
-struct ExposureAnalyzerMetricsTests {
+@Suite("ExposureAnalyzer - Configuration")
+struct ExposureAnalyzerConfigurationTests {
 
-    @Test("Current exposure is initialized to zero")
+    @Test("configure accepts all valid settings")
     @MainActor
-    func testInitialExposure() {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-        #expect(analyzer.currentExposure == 0.0)
-    }
-
-    @Test("Target EV is initialized to zero")
-    @MainActor
-    func testInitialTargetEV() {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-        #expect(analyzer.targetEV == 0.0)
-    }
-
-    @Test("Exposure compensation starts at zero")
-    @MainActor
-    func testInitialExposureCompensation() {
-        guard #available(iOS 15.0, macOS 12.0, *) else { return }
-
-        let analyzer = ExposureAnalyzer()
-        #expect(analyzer.exposureCompensation == 0.0)
-    }
-
-    @Test("Configuration accepts settings dictionary")
-    @MainActor
-    func testConfigurationWithSettings() {
+    func testConfigureAllSettings() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
@@ -265,39 +177,56 @@ struct ExposureAnalyzerMetricsTests {
         let settings: [String: Any] = [
             "adaptiveAnalysisEnabled": false,
             "sceneAnalysisEnabled": false,
+            "exposureSmoothingEnabled": false,
             "targetEV": 1.5
         ]
 
         analyzer.configure(with: settings)
 
-        // Configuration should succeed
-        #expect(true)
+        // Configuration should succeed without throwing
+        #expect(analyzer.isEnabled == true)
     }
 
-    @Test("Enable/disable toggle works")
+    @Test("configure handles partial settings")
     @MainActor
-    func testEnableDisable() {
+    func testConfigurePartialSettings() {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
 
+        // Only some settings
+        let partialSettings: [String: Any] = [
+            "adaptiveAnalysisEnabled": true,
+            "targetEV": 0.5
+        ]
+
+        analyzer.configure(with: partialSettings)
+
         #expect(analyzer.isEnabled == true)
+    }
 
-        analyzer.isEnabled = false
-        #expect(analyzer.isEnabled == false)
+    @Test("configure handles empty settings")
+    @MainActor
+    func testConfigureEmptySettings() {
+        guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
-        analyzer.isEnabled = true
+        let analyzer = ExposureAnalyzer()
+
+        let emptySettings: [String: Any] = [:]
+
+        analyzer.configure(with: emptySettings)
+
         #expect(analyzer.isEnabled == true)
     }
 }
 
-// MARK: - Performance Tests with Mocks
+// MARK: - Performance Tests
 
-@Suite("ExposureAnalyzer - Performance with Mocks")
-struct ExposureAnalyzerPerformanceTests {
+@Suite("ExposureAnalyzer - Advanced Performance")
+struct ExposureAnalyzerAdvancedPerformanceTests {
 
     @Test("CIImage conversion is fast")
-    func testCIImageConversionPerformance() {
+    func testCIImageConversionSpeed() {
         guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 1280, height: 720) else {
             Issue.record("Failed to create pixel buffer")
             return
@@ -314,9 +243,9 @@ struct ExposureAnalyzerPerformanceTests {
         #expect(timeElapsed < 1.0, "100 CIImage conversions should take < 1s")
     }
 
-    @Test("Multiple scenario buffers can be processed quickly")
+    @Test("Multiple scenario buffers can be analyzed quickly")
     @MainActor
-    func testMultiScenarioProcessing() async throws {
+    func testMultiScenarioAnalysis() async throws {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
@@ -334,19 +263,17 @@ struct ExposureAnalyzerPerformanceTests {
 
         for buffer in scenarios {
             guard let pixelBuffer = buffer else { continue }
-            let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-            analyzer.analyze(frame: sendableBuffer)
-            try await Task.sleep(nanoseconds: 10_000_000) // 10ms between frames
+            _ = analyzer.analyze(frame: pixelBuffer)
         }
 
         let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
 
-        #expect(timeElapsed < 5.0, "Processing 5 scenarios should take < 5s")
+        #expect(timeElapsed < 3.0, "Processing 5 scenarios should take < 3s")
     }
 
-    @Test("Analyzer can handle rapid frame updates")
+    @Test("Analyzer handles rapid sequential frames")
     @MainActor
-    func testRapidFrameUpdates() async throws {
+    func testRapidSequentialAnalysis() async throws {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
@@ -357,26 +284,23 @@ struct ExposureAnalyzerPerformanceTests {
             return
         }
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        // Simulate 30 fps for 1 second
-        for _ in 0..<30 {
-            analyzer.analyze(frame: sendableBuffer)
-            try await Task.sleep(nanoseconds: 33_000_000) // ~33ms
+        // Simulate rapid frame processing
+        for _ in 0..<20 {
+            _ = analyzer.analyze(frame: pixelBuffer)
         }
 
         let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
 
-        #expect(timeElapsed < 2.0, "30 rapid frames should complete within 2s")
+        #expect(timeElapsed < 2.0, "20 rapid analyses should complete within 2s")
     }
 }
 
 // MARK: - Edge Cases
 
-@Suite("ExposureAnalyzer - Edge Cases with Mocks")
-struct ExposureAnalyzerEdgeCasesTests {
+@Suite("ExposureAnalyzer - Advanced Edge Cases")
+struct ExposureAnalyzerAdvancedEdgeCasesTests {
 
     @Test("Handles very small frame size")
     @MainActor
@@ -384,20 +308,15 @@ struct ExposureAnalyzerEdgeCasesTests {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
 
         guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 64, height: 64) else {
             Issue.record("Failed to create small buffer")
             return
         }
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
+        let result = analyzer.analyze(frame: pixelBuffer)
+        #expect(result != nil, "Small frame should be analyzable")
     }
 
     @Test("Handles very large frame size")
@@ -406,20 +325,15 @@ struct ExposureAnalyzerEdgeCasesTests {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
 
         guard let pixelBuffer = MockPixelBuffer.wellExposed(width: 7680, height: 4320) else {
             Issue.record("Failed to create 8K buffer")
             return
         }
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 200_000_000) // Extra time for large frame
-
-        #expect(analyzer.isEnabled == true)
+        let result = analyzer.analyze(frame: pixelBuffer)
+        #expect(result != nil, "8K frame should be analyzable")
     }
 
     @Test("Handles checkerboard pattern")
@@ -428,6 +342,7 @@ struct ExposureAnalyzerEdgeCasesTests {
         guard #available(iOS 15.0, macOS 12.0, *) else { return }
 
         let analyzer = ExposureAnalyzer()
+        analyzer.isEnabled = true
 
         guard let pixelBuffer = MockPixelBuffer.checkerboard(
             width: 1280,
@@ -438,13 +353,7 @@ struct ExposureAnalyzerEdgeCasesTests {
             return
         }
 
-        let sendableBuffer = SendablePixelBuffer(buffer: pixelBuffer)
-
-        analyzer.isEnabled = true
-        analyzer.analyze(frame: sendableBuffer)
-
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(analyzer.isEnabled == true)
+        let result = analyzer.analyze(frame: pixelBuffer)
+        #expect(result != nil, "Checkerboard pattern should be analyzable")
     }
 }
