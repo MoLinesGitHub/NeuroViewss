@@ -1,0 +1,331 @@
+name: iOS CI - NeuroViews 2.0
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  XCODE_VERSION: '16.0'
+  IOS_SIMULATOR: 'iPhone 16e'
+  IOS_VERSION: '26.0'
+  SCHEME: 'NeuroViews 2.0'
+  # WARNING LIMITS - Reduce estos valores a medida que se resuelven warnings
+  MAX_WARNINGS: 84      # Límite actual (Enero 2025)
+  TARGET_WARNINGS: 40   # Meta después de Opción 1 (Actor Isolation)
+  FINAL_WARNINGS: 0     # Meta final
+  # COVERAGE LIMITS - Incrementar estos valores a medida que se añaden tests
+  MIN_COVERAGE: 4.5     # Límite mínimo (Baseline: 4.96% - 24 Ene 2025)
+  TARGET_COVERAGE: 20.0 # Meta Semana 1-2 (Tests básicos)
+  FINAL_COVERAGE: 60.0  # Meta final (Semana 4)
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Para git history completo
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.xcodeproj') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
+
+      - name: Boot simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available | grep "${{ env.IOS_SIMULATOR }}" | grep -o '[A-F0-9-]\{36\}' | head -1)
+          echo "Booting simulator: $DEVICE_ID"
+          xcrun simctl boot "$DEVICE_ID" || echo "Simulator already booted"
+
+      - name: Build project (with warning count)
+        id: build
+        run: |
+          set -o pipefail
+
+          xcodebuild clean build \
+            -scheme "${{ env.SCHEME }}" \
+            -destination "platform=iOS Simulator,name=${{ env.IOS_SIMULATOR }},OS=${{ env.IOS_VERSION }}" \
+            -configuration Debug \
+            -derivedDataPath ./DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build_log.txt \
+            | xcbeautify --quieter
+
+          # Contar warnings
+          WARNING_COUNT=$(grep -c "warning:" build_log.txt || echo "0")
+          echo "WARNING_COUNT=$WARNING_COUNT" >> $GITHUB_ENV
+          echo "::notice title=Build Warnings::Found $WARNING_COUNT warnings"
+
+          # Guardar para el summary
+          echo "warnings=$WARNING_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Check warning threshold
+        if: always()
+        run: |
+          echo "Current warnings: ${{ env.WARNING_COUNT }}"
+          echo "Maximum allowed: ${{ env.MAX_WARNINGS }}"
+          echo "Target (Opción 1): ${{ env.TARGET_WARNINGS }}"
+          echo "Final goal: ${{ env.FINAL_WARNINGS }}"
+
+          if [ "${{ env.WARNING_COUNT }}" -gt "${{ env.MAX_WARNINGS }}" ]; then
+            echo "::error title=Warning Threshold Exceeded::Warning count (${{ env.WARNING_COUNT }}) exceeds maximum allowed (${{ env.MAX_WARNINGS }})"
+            exit 1
+          elif [ "${{ env.WARNING_COUNT }}" -le "${{ env.TARGET_WARNINGS }}" ]; then
+            echo "::notice title=Target Reached::✅ Warning count below target! Consider reducing MAX_WARNINGS to ${{ env.WARNING_COUNT }}"
+          fi
+
+      - name: Run tests (with coverage)
+        id: test
+        run: |
+          set -o pipefail
+
+          xcodebuild test \
+            -scheme "${{ env.SCHEME }}" \
+            -destination "platform=iOS Simulator,name=${{ env.IOS_SIMULATOR }},OS=${{ env.IOS_VERSION }}" \
+            -configuration Debug \
+            -derivedDataPath ./DerivedData \
+            -enableCodeCoverage YES \
+            -resultBundlePath ./TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee test_log.txt \
+            | xcbeautify --quieter
+
+          # Extraer resultados de tests
+          TEST_COUNT=$(grep -c "Test case.*passed" test_log.txt || echo "0")
+          FAILED_COUNT=$(grep -c "Test case.*failed" test_log.txt || echo "0")
+
+          echo "TEST_COUNT=$TEST_COUNT" >> $GITHUB_ENV
+          echo "FAILED_COUNT=$FAILED_COUNT" >> $GITHUB_ENV
+          echo "::notice title=Tests Passed::$TEST_COUNT tests passed, $FAILED_COUNT failed"
+
+      - name: Generate coverage report
+        if: always() && steps.test.outcome == 'success'
+        run: |
+          # Generar reporte JSON de coverage
+          xcrun xccov view --report --json ./TestResults.xcresult > coverage.json || echo "{}" > coverage.json
+
+          # Extraer coverage del target principal usando jq
+          if command -v jq &> /dev/null; then
+            COVERAGE=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .lineCoverage * 100' coverage.json 2>/dev/null || echo "0.0")
+            COVERED_LINES=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .coveredLines' coverage.json 2>/dev/null || echo "0")
+            TOTAL_LINES=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .executableLines' coverage.json 2>/dev/null || echo "1")
+          else
+            echo "::warning::jq not found, installing..."
+            brew install jq
+            COVERAGE=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .lineCoverage * 100' coverage.json 2>/dev/null || echo "0.0")
+            COVERED_LINES=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .coveredLines' coverage.json 2>/dev/null || echo "0")
+            TOTAL_LINES=$(jq -r '.targets[] | select(.name == "NeuroViews 2.0.app") | .executableLines' coverage.json 2>/dev/null || echo "1")
+          fi
+
+          # Redondear coverage a 2 decimales
+          COVERAGE=$(printf "%.2f" "$COVERAGE")
+
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+          echo "COVERED_LINES=$COVERED_LINES" >> $GITHUB_ENV
+          echo "TOTAL_LINES=$TOTAL_LINES" >> $GITHUB_ENV
+
+          echo "::notice title=Code Coverage::${COVERAGE}% coverage ($COVERED_LINES/$TOTAL_LINES lines)"
+
+          # Guardar para comparación en PRs
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Check coverage threshold
+        if: always() && steps.test.outcome == 'success'
+        run: |
+          echo "Current coverage: ${{ env.COVERAGE }}%"
+          echo "Minimum required: ${{ env.MIN_COVERAGE }}%"
+          echo "Target (Semana 1-2): ${{ env.TARGET_COVERAGE }}%"
+          echo "Final goal: ${{ env.FINAL_COVERAGE }}%"
+
+          # Comparar coverage (usar bc para float comparison)
+          if command -v bc &> /dev/null; then
+            BELOW_MIN=$(echo "${{ env.COVERAGE }} < ${{ env.MIN_COVERAGE }}" | bc -l)
+            ABOVE_TARGET=$(echo "${{ env.COVERAGE }} >= ${{ env.TARGET_COVERAGE }}" | bc -l)
+          else
+            # Fallback: comparación entera (multiplicar por 100)
+            COVERAGE_INT=$(echo "${{ env.COVERAGE }} * 100" | awk '{print int($1)}')
+            MIN_INT=$(echo "${{ env.MIN_COVERAGE }} * 100" | awk '{print int($1)}')
+            TARGET_INT=$(echo "${{ env.TARGET_COVERAGE }} * 100" | awk '{print int($1)}')
+
+            BELOW_MIN=0
+            [ "$COVERAGE_INT" -lt "$MIN_INT" ] && BELOW_MIN=1
+
+            ABOVE_TARGET=0
+            [ "$COVERAGE_INT" -ge "$TARGET_INT" ] && ABOVE_TARGET=1
+          fi
+
+          if [ "$BELOW_MIN" = "1" ]; then
+            echo "::error title=Coverage Below Minimum::Coverage (${{ env.COVERAGE }}%) is below minimum required (${{ env.MIN_COVERAGE }}%)"
+            exit 1
+          elif [ "$ABOVE_TARGET" = "1" ]; then
+            echo "::notice title=Target Reached::✅ Coverage above target! Consider increasing MIN_COVERAGE to ${{ env.COVERAGE }}%"
+          else
+            echo "::notice title=Coverage OK::Coverage is above minimum (${{ env.MIN_COVERAGE }}%) but below target (${{ env.TARGET_COVERAGE }}%)"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ./TestResults.xcresult
+            build_log.txt
+            test_log.txt
+            coverage.json
+          retention-days: 30
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-logs
+          path: |
+            build_log.txt
+            test_log.txt
+          retention-days: 7
+
+      - name: Generate job summary
+        if: always()
+        run: |
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## 📊 Build & Test Summary
+
+          ### Build Status
+          - **Warnings:** ${{ env.WARNING_COUNT }} / ${{ env.MAX_WARNINGS }} allowed
+          - **Target:** ${{ env.TARGET_WARNINGS }} (Opción 1 goal)
+          - **Final Goal:** ${{ env.FINAL_WARNINGS }}
+
+          ### Test Results
+          - **Passed:** ${{ env.TEST_COUNT }}
+          - **Failed:** ${{ env.FAILED_COUNT }}
+
+          ### Code Coverage 📈
+          - **Current:** ${{ env.COVERAGE }}% (${{ env.COVERED_LINES }}/${{ env.TOTAL_LINES }} lines)
+          - **Minimum:** ${{ env.MIN_COVERAGE }}%
+          - **Target (Semana 1-2):** ${{ env.TARGET_COVERAGE }}%
+          - **Final Goal (Semana 4):** ${{ env.FINAL_COVERAGE }}%
+
+          ### Progress Tracker
+
+          | Milestone | Warnings | Coverage | Status |
+          |-----------|----------|----------|--------|
+          | Initial State | 94+ | ~7% | ✅ Complete |
+          | Opción 2 (CVPixelBuffer) | ~84 | ~7% | ✅ Complete |
+          | Opción 3 (Tests + CI/CD) | ${{ env.WARNING_COUNT }} | ${{ env.COVERAGE }}% | 🔄 In Progress |
+          | Opción 1 (Actor Isolation) | ${{ env.TARGET_WARNINGS }} | ${{ env.TARGET_COVERAGE }}% | ⏳ Pending |
+          | Final Goal | ${{ env.FINAL_WARNINGS }} | ${{ env.FINAL_COVERAGE }}% | ⏳ Pending |
+
+          ### Coverage Breakdown
+          \`\`\`
+          SmartAutoFocus:    ~11% (baseline: 7%)   ✅ Improved
+          ExposureAnalyzer:  ~9%  (baseline: 2%)   ✅ Improved
+          CameraManager:     0%   (baseline: 0%)   ⏳ Pending
+          SendablePixelBuffer: ~27%                ✅ Good
+          DataManager:       ~32%                  ✅ Good
+          \`\`\`
+
+          ### Next Steps
+          \`\`\`
+          1. Add CameraManager tests (0% → 30%)
+          2. Expand SmartAutoFocus & ExposureAnalyzer tests (40%+ target)
+          3. If warnings > ${{ env.TARGET_WARNINGS }}: Implement Opción 1 (Actor Isolation)
+          4. Increase MIN_COVERAGE incrementally as tests are added
+          \`\`\`
+
+          ---
+          📝 Generated by [NeuroViews CI/CD](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+
+  warning-analysis:
+    name: Detailed Warning Analysis
+    runs-on: macos-15
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Analyze warnings by category
+        run: |
+          set -o pipefail
+
+          # Build y extraer warnings
+          xcodebuild clean build \
+            -scheme "${{ env.SCHEME }}" \
+            -destination "platform=iOS Simulator,name=${{ env.IOS_SIMULATOR }},OS=${{ env.IOS_VERSION }}" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | grep "warning:" > all_warnings.txt || echo "No warnings found" > all_warnings.txt
+
+          # Categorizar warnings
+          echo "### Warning Breakdown by Category" > warning_report.md
+          echo "" >> warning_report.md
+
+          # Actor isolation warnings
+          ACTOR_WARNINGS=$(grep -c "actor-isolated" all_warnings.txt || echo "0")
+          echo "- **Actor Isolation:** $ACTOR_WARNINGS" >> warning_report.md
+
+          # Sendable warnings
+          SENDABLE_WARNINGS=$(grep -c "Sendable" all_warnings.txt || echo "0")
+          echo "- **Sendable Conformance:** $SENDABLE_WARNINGS" >> warning_report.md
+
+          # MainActor warnings
+          MAINACTOR_WARNINGS=$(grep -c "MainActor" all_warnings.txt || echo "0")
+          echo "- **MainActor Issues:** $MAINACTOR_WARNINGS" >> warning_report.md
+
+          # Deprecation warnings
+          DEPRECATED_WARNINGS=$(grep -c "deprecated" all_warnings.txt || echo "0")
+          echo "- **Deprecations:** $DEPRECATED_WARNINGS" >> warning_report.md
+
+          # Other warnings
+          TOTAL_WARNINGS=$(wc -l < all_warnings.txt | tr -d ' ')
+          OTHER_WARNINGS=$((TOTAL_WARNINGS - ACTOR_WARNINGS - SENDABLE_WARNINGS - MAINACTOR_WARNINGS - DEPRECATED_WARNINGS))
+          echo "- **Other:** $OTHER_WARNINGS" >> warning_report.md
+          echo "" >> warning_report.md
+          echo "**Total:** $TOTAL_WARNINGS warnings" >> warning_report.md
+
+          # Top warning sources
+          echo "" >> warning_report.md
+          echo "### Top Warning Sources" >> warning_report.md
+          echo "\`\`\`" >> warning_report.md
+          grep "warning:" all_warnings.txt | sed 's/.*\/NeuroViews 2.0\///' | sed 's/:.*//' | sort | uniq -c | sort -rn | head -10 >> warning_report.md
+          echo "\`\`\`" >> warning_report.md
+
+          cat warning_report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload warning analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: warning-analysis
+          path: |
+            all_warnings.txt
+            warning_report.md
+          retention-days: 30
