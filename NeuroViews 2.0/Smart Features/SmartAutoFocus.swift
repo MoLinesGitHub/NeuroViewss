@@ -67,9 +67,7 @@ public final class SmartAutoFocus: ObservableObject {
         
         // Initialize body pose detection for full subject tracking
         bodyDetectionRequest = VNDetectHumanBodyPoseRequest()
-        if #available(iOS 14.0, *) {
-            bodyDetectionRequest?.revision = VNDetectHumanBodyPoseRequestRevision1
-        }
+        bodyDetectionRequest?.revision = VNDetectHumanBodyPoseRequestRevision1
     }
     
     // private func setupFocusAnalyzer() {
@@ -112,10 +110,10 @@ public final class SmartAutoFocus: ObservableObject {
                 
                 // CRITICAL FIX: Simplified analysis to reduce resource usage
                 let subjects = await self.detectSubjectsLightweight(pixelBuffer)
-                let optimalFocusPoint = self.calculateOptimalFocusPoint(subjects: subjects, analysis: nil)
                 
                 Task { @MainActor in
                     // CRITICAL FIX: Only update essential properties
+                    let optimalFocusPoint = self.calculateOptimalFocusPoint(subjects: subjects, analysis: nil)
                     self.trackingSubjects = subjects
                     self.currentFocusPoint = optimalFocusPoint
                     self.isAnalyzing = false
@@ -223,22 +221,20 @@ public final class SmartAutoFocus: ObservableObject {
             }
             
             // Detect human bodies
-            if #available(iOS 14.0, *) {
-                if let bodyRequest = bodyDetectionRequest {
-                    try imageRequestHandler.perform([bodyRequest])
-                    if let bodies = bodyRequest.results {
-                        for body in bodies {
-                            // Convert body pose to bounding box
-                            if let points = try? body.recognizedPoints(.all) {
-                                let boundingBox = calculateBoundingBox(from: points)
-                                subjects.append(DetectedSubject(
-                                    type: .humanBody,
-                                    boundingBox: boundingBox,
-                                    confidence: body.confidence,
-                                    isPrimary: subjects.filter({ $0.type == .humanBody }).isEmpty,
-                                    trackingID: UUID()
-                                ))
-                            }
+            if let bodyRequest = bodyDetectionRequest {
+                try imageRequestHandler.perform([bodyRequest])
+                if let bodies = bodyRequest.results {
+                    for body in bodies {
+                        // Convert body pose to bounding box
+                        if let points = try? body.recognizedPoints(.all) {
+                            let boundingBox = calculateBoundingBox(from: points)
+                            subjects.append(DetectedSubject(
+                                type: .humanBody,
+                                boundingBox: boundingBox,
+                                confidence: body.confidence,
+                                isPrimary: subjects.filter({ $0.type == .humanBody }).isEmpty,
+                                trackingID: UUID()
+                            ))
                         }
                     }
                 }
@@ -317,7 +313,7 @@ public final class SmartAutoFocus: ObservableObject {
         )
     }
     
-    nonisolated private func generateFocusSuggestions(analysis: FocusAnalysis, subjects: [DetectedSubject]) -> [FocusSuggestion] {
+    private func generateFocusSuggestions(analysis: FocusAnalysis, subjects: [DetectedSubject]) -> [FocusSuggestion] {
         var suggestions: [FocusSuggestion] = []
         
         // Low focus quality suggestion
@@ -365,7 +361,7 @@ public final class SmartAutoFocus: ObservableObject {
         return suggestions
     }
     
-    nonisolated private func calculateOptimalFocusPoint(subjects: [DetectedSubject], analysis: FocusAnalysis?) -> CGPoint {
+    private func calculateOptimalFocusPoint(subjects: [DetectedSubject], analysis: FocusAnalysis?) -> CGPoint {
         // Priority 1: Primary subject (faces)
         if let primaryFace = subjects.first(where: { $0.type == .face && $0.isPrimary }) {
             return primaryFace.boundingBox.center

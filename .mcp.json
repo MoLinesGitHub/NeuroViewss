@@ -9,64 +9,55 @@
 				"task-master-ai"
 			],
 			"env": {
-				"ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
-				"PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
-				"OPENAI_API_KEY": "${OPENAI_API_KEY}",
-				"GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-				"XAI_API_KEY": "${XAI_API_KEY}",
-				"OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
-				"MISTRAL_API_KEY": "${MISTRAL_API_KEY}",
-				"AZURE_OPENAI_API_KEY": "${AZURE_OPENAI_API_KEY}",
-				"OLLAMA_API_KEY": "${OLLAMA_API_KEY}"
+				"OPENAI_API_KEY": "${OPENAI_API_KEY}"
 			}
-		},
-		"neuroviews-env-mcp": {
-			"type": "stdio",
-			"command": "node",
-			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/neuroviews-env-mcp/dist/index.js"
-			]
-		},
-		"neuroviews-camera-mcp": {
-			"type": "stdio",
-			"command": "node",
-			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/neuroviews-camera-mcp/dist/index.js"
-			]
-		},
-		"neuroviews-growth-mcp": {
-			"type": "stdio",
-			"command": "node",
-			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/neuroviews-growth-mcp/dist/index.js"
-			]
 		},
 		"xcode-mcp": {
 			"type": "stdio",
 			"command": "node",
 			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/xcode-mcp/dist/index.js"
+				"/Volumes/SSD/xCode_Projects/NeuroViews/mcps/xcode-mcp/dist/index.js"
 			]
 		},
 		"swift-mcp": {
 			"type": "stdio",
 			"command": "node",
 			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/swift-mcp/dist/index.js"
+				"/Volumes/SSD/xCode_Projects/NeuroViews/mcps/swift-mcp/dist/index.js"
 			]
 		},
 		"ios-simulator-mcp": {
 			"type": "stdio",
 			"command": "node",
 			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/ios-simulator-mcp/dist/index.js"
+				"/Volumes/SSD/xCode_Projects/NeuroViews/mcps/ios-simulator-mcp/dist/index.js"
 			]
 		},
-		"neuroviews-dev-mcp": {
+		"github": {
 			"type": "stdio",
-			"command": "node",
+			"command": "npx",
 			"args": [
-				"/Volumes/SSD/xCode_Projects/NeuroViews/Tools/MCP/neuroviews-dev-mcp/dist/index.js"
+				"-y",
+				"@modelcontextprotocol/server-github"
+			],
+			"env": {
+				"GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+			}
+		},
+		"sequential-thinking": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@modelcontextprotocol/server-sequential-thinking"
+			]
+		},
+		"memory": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@modelcontextprotocol/server-memory"
 			]
 		}
 	}

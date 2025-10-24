@@ -260,7 +260,11 @@ final class CameraManager: NSObject, ObservableObject {
             
             // CRITICAL FIX: Minimize output quality to reduce memory pressure
             if let connection = videoDataOutput.connection(with: .video) {
-                connection.videoOrientation = .portrait
+                if #available(iOS 17.0, *) {
+                    connection.videoRotationAngle = 90.0 // Portrait orientation
+                } else {
+                    connection.videoOrientation = .portrait
+                }
                 // Reduce video data rate
                 connection.isEnabled = true
             }
@@ -450,21 +454,39 @@ final class CameraManager: NSObject, ObservableObject {
     }
     
     // MARK: - Focus Control
+    private var lastFocusTime: TimeInterval = 0
+    
     func focusAt(point: CGPoint, in previewLayer: AVCaptureVideoPreviewLayer) {
         guard let device = videoDeviceInput?.device,
               device.isFocusPointOfInterestSupported else { return }
         
+        // Debounce focus requests to prevent gesture gate timeouts
+        let currentTime = CACurrentMediaTime()
+        if currentTime - lastFocusTime < 0.5 { // 500ms debounce
+            return
+        }
+        lastFocusTime = currentTime
+        
         let focusPoint = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
         
-        do {
-            try device.lockForConfiguration()
-            device.focusPointOfInterest = focusPoint
-            device.focusMode = .autoFocus
-            device.exposurePointOfInterest = focusPoint
-            device.exposureMode = .autoExpose
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Unable to focus: \(error)")
+        // Perform focus operation asynchronously to prevent blocking
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                try device.lockForConfiguration()
+                device.focusPointOfInterest = focusPoint
+                device.focusMode = .autoFocus
+                device.exposurePointOfInterest = focusPoint
+                device.exposureMode = .autoExpose
+                device.unlockForConfiguration()
+                print("✅ Focus set to point: \(focusPoint)")
+            } catch {
+                print("❌ Unable to focus: \(error)")
+                Task { @MainActor in
+                    self.errorMessage = "Unable to focus camera"
+                }
+            }
         }
     }
     
@@ -546,19 +568,22 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        // Extract pixel buffer outside of Task to avoid Sendable issues
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // Extract pixel buffer for async processing
+        guard let originalPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
-        // CRITICAL FIX: Throttle to max 10fps for background processing to prevent iOS termination
+        // CRITICAL FIX: Throttle to max 10fps for background processing to prevent iOS termination  
         let currentTime = CACurrentMediaTime()
-        if currentTime - lastFrameProcessingTime < 0.1 { // 100ms minimum interval
-            return
-        }
-        lastFrameProcessingTime = currentTime
         
         // CRITICAL FIX: Use weak reference to prevent retain cycles causing memory pressure
         Task { @MainActor [weak self] in
+            
             guard let self = self, self.isAIAnalysisEnabled else { return }
+            
+            // More aggressive throttle to prevent gesture gate timeouts (200ms minimum)
+            if currentTime - self.lastFrameProcessingTime < 0.2 {
+                return
+            }
+            self.lastFrameProcessingTime = currentTime
             
             // CRITICAL FIX: Process only one task at a time to prevent resource exhaustion
             if self.isProcessingFrame { return }
@@ -569,11 +594,11 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             
             // CRITICAL FIX: Use original buffer directly, no copying to reduce memory pressure
-            self.processFrameForAI(pixelBuffer)
+            self.processFrameForAI(originalPixelBuffer)
             
             // CRITICAL FIX: Skip smart features if AI processing is active
             if self.isSmartFeaturesEnabled && !self.isProcessingFrame {
-                self.processFrameForSmartFeatures(pixelBuffer)
+                self.processFrameForSmartFeatures(originalPixelBuffer)
             }
         }
     }

@@ -110,22 +110,34 @@ class InteractivePreviewView: PlatformView {
             removeGestureRecognizer(existingGesture)
         }
         
-        // Add new tap gesture
+        // Add new tap gesture with optimized settings
         tapGesture = TapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         if let tapGesture = tapGesture {
+            // Optimize gesture recognition to prevent system gesture conflicts
+            tapGesture.delaysTouchesEnded = false
+            tapGesture.cancelsTouchesInView = false
+            tapGesture.numberOfTapsRequired = 1
+            tapGesture.numberOfTouchesRequired = 1
             addGestureRecognizer(tapGesture)
         }
     }
     
     @objc private func handleTap(_ gesture: TapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        
         let tapPoint = gesture.location(in: self)
         
-        // Show focus indicator animation
-        showFocusIndicator(at: tapPoint)
-        
-        // Call focus handler
-        if let previewLayer = previewLayer {
-            onTapToFocus?(tapPoint, previewLayer)
+        // Async processing to prevent gesture gate timeout
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Show focus indicator animation
+            self.showFocusIndicator(at: tapPoint)
+            
+            // Call focus handler asynchronously to prevent blocking
+            if let previewLayer = self.previewLayer {
+                self.onTapToFocus?(tapPoint, previewLayer)
+            }
         }
     }
     
@@ -134,7 +146,7 @@ class InteractivePreviewView: PlatformView {
         focusView.center = point
         addSubview(focusView)
         
-        focusView.animateFocus { [weak self] in
+        focusView.animateFocus {
             focusView.removeFromSuperview()
         }
     }

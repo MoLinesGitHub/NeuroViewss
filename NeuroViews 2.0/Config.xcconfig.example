@@ -1,0 +1,31 @@
+// ==========================================
+// 🧠 NEUROVIEWS 2.0 - CONFIG.XCCONFIG (Swift)
+// ==========================================
+//
+// IMPORTANT: Copy this file to Config.xcconfig and fill in your actual API keys
+// Config.xcconfig is gitignored to prevent accidentally committing secrets
+
+API_BASE_URL = https://api.neuroviews.ai
+
+// --- AI Keys ---
+OPENAI_API_KEY = your_openai_api_key_here
+ANTHROPIC_API_KEY = your_anthropic_api_key_here
+OPENROUTER_API_KEY = your_openrouter_api_key_here
+GEMINI_API_KEY = your_gemini_api_key_here
+DEEPL_API_KEY = your_deepl_api_key_here
+
+// --- External Services ---
+OPENWEATHER_API_KEY = your_openweather_api_key_here
+N8N_API_TOKEN = your_n8n_api_token_here
+CLOUDFLARED_TOKEN = your_cloudflared_token_here
+
+// --- Developer Services ---
+VERCEL_MCP_API_TOKEN = your_vercel_token_here
+NEON_API_KEY = your_neon_api_key_here
+PRISMA_ACCELERATE_KEY = your_prisma_key_here
+
+// --- GitHub Integration ---
+GITHUB_PAT_1 = your_github_pat_here
+GITHUB_PAT_2 = your_github_pat_here
+GITHUB_PAT_3 = your_github_pat_here
+GITHUB_PAT_COPILOT = your_github_copilot_pat_here

@@ -90,6 +90,15 @@ iOSInjectionProject/
 .claude/
 .mcp.json
 
+# Kiro IDE
+.kiro/
+
+# MCP Servers locales
+mcps/
+
+# Configuration files with secrets
+**/Config.xcconfig
+
 # Logs
 logs
 *.log

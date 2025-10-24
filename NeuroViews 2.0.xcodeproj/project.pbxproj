@@ -211,8 +211,6 @@
 			knownRegions = (
 				Base,
 				es,
-				en,
-				fr,
 			);
 			mainGroup = 996DBED42E7338090079478F;
 			minimizedProjectReferenceProxies = 1;
@@ -301,12 +299,26 @@
 				DEVELOPMENT_TEAM = GD6M44DYPQ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NeuroViews 2.0/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "NeuroViews 2";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSCameraUsageDescription = "NeuroViews needs access to your camera to capture photos and videos with AI-powered guidance and smart processing features.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NeuroViews needs access to your microphone to record audio when capturing videos.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "NeuroViews needs access to save your captured photos and videos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NeuroViews needs access to your photo library to view and manage your captured photos and videos.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -349,12 +361,26 @@
 				DEVELOPMENT_TEAM = GD6M44DYPQ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "NeuroViews 2.0/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "NeuroViews 2";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
+				INFOPLIST_KEY_NSCameraUsageDescription = "NeuroViews needs access to your camera to capture photos and videos with AI-powered guidance and smart processing features.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NeuroViews needs access to your microphone to record audio when capturing videos.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "NeuroViews needs access to save your captured photos and videos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NeuroViews needs access to your photo library to view and manage your captured photos and videos.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -370,6 +396,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 2.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.molinesdesigns.NeuroViews2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -388,6 +415,8 @@
 		};
 		996DBF042E73380A0079478F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 996DBEDF2E7338090079478F /* NeuroViews 2.0 */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -445,11 +474,14 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
 		996DBF052E73380A0079478F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 996DBEDF2E7338090079478F /* NeuroViews 2.0 */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -499,6 +531,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -614,7 +647,7 @@
 				996DBF052E73380A0079478F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		996DBF012E73380A0079478F /* Build configuration list for PBXNativeTarget "NeuroViews 2.0" */ = {
 			isa = XCConfigurationList;
@@ -623,7 +656,7 @@
 				996DBF032E73380A0079478F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		996DBF062E73380A0079478F /* Build configuration list for PBXNativeTarget "NeuroViews 2.0Tests" */ = {
 			isa = XCConfigurationList;
@@ -632,7 +665,7 @@
 				996DBF082E73380A0079478F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		996DBF092E73380A0079478F /* Build configuration list for PBXNativeTarget "NeuroViews 2.0UITests" */ = {
 			isa = XCConfigurationList;
@@ -641,7 +674,7 @@
 				996DBF0B2E73380A0079478F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
